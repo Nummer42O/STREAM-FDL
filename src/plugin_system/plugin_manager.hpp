@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stream_plugins.h>
+#include "stream_plugins.h"
 
 #include <dlfcn.h>
 #include <link.h>

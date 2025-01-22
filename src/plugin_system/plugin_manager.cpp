@@ -1,4 +1,4 @@
-#include "plugin_manager/plugin_manager.hpp"
+#include "plugin_manager.hpp"
 
 #include <utility>
 #include <string>
