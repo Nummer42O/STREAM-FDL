@@ -1,0 +1,3 @@
+[submodule "src/3rd/stream-ipc"]
+	path = src/3rd/stream-ipc
+	url = git@github.com:Nummer42O/STREAM-IPC.git

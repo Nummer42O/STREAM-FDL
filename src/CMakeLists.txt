@@ -6,3 +6,4 @@ target_sources(main
     main.cpp
 )
 add_subdirectory(plugin_system)
+add_subdirectory(3rd)
