@@ -1,0 +1,45 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
+{
+	"name": "Ubuntu 22.04",
+	"build": {
+		"context": "..",
+		"dockerfile": "Dockerfile",
+    "args": {
+      "USERNAME": "johannes"
+    },
+    "mounts": [
+      "type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix",
+    ]
+	},
+  "workspaceMount": "type=bind,src=${localWorkspaceFolder},dst=/home/johannes/stream-fdl",
+  "workspaceFolder": "/home/johannes/stream-fdl",
+	"containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}"
+	},
+	"runArgs": [
+    "--runtime=nvidia", "--gpus=all"
+	],
+  // "privileged": true,
+
+  "initializeCommand": "/usr/bin/ssh -T git@github.com; true",
+	"updateRemoteUserUID": false,
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"bierner.markdown-checkbox",
+				"bierner.markdown-footnotes",
+				"shd101wyy.markdown-preview-enhanced",
+				"bierner.markdown-preview-github-styles",
+				"darkriszty.markdown-table-prettify",
+				"flyfly6.terminal-in-status-bar",
+				"discretegames.f5anything",
+				"GrapeCity.gc-excelviewer",
+				"albymor.increment-selection",
+				"bmalehorn.shell-syntax",
+				"redhat.vscode-xml"
+			]
+		}
+	}
+}
