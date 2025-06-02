@@ -52,11 +52,7 @@ FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::A
     rawAttributes.push_back(entry.second);
     attrWindow.emplace(
       entry.first,
-      SlidingWindow{
-        .ready = false,
-        .raw = std::move(rawAttributes),
-        .filtered = CircularBuffer(CIRCULAR_BUFFER_SIZE)
-      }
+      std::move(rawAttributes)
     );
   }
   return attrWindow;
@@ -65,25 +61,5 @@ FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::A
 void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping)
 {
   for (const Member::AttributeMapping::value_type &entry: attributeMapping)
-  {
-    SlidingWindow &slidingWindow = window.at(entry.first);
-
-    // if we have "enough" raw values, start filtering
-    if (slidingWindow.ready || slidingWindow.raw.isFull())
-    {
-      slidingWindow.ready = true;
-      auto [mean, stdDev] = slidingWindow.raw.getDifferentialMetrics();
-      double lastValue = *slidingWindow.raw.current(-1);
-      slidingWindow.filtered.push_back(getZScore(mean, stdDev, (entry.second - lastValue)));
-    }
-
-    // append raw value
-    slidingWindow.raw.push_back(entry.second);
-  }
-}
-
-double FaultDetection::mahalanobisDistance(const AttributeWindow &correlatedAttributes)
-{
-  Eigen::MatrixXd covarianceMatrix(correlatedAttributes.size(), correlatedAttributes.size());
-  //! TODO: CONTINUE
+    window.at(entry.first).push_back(entry.second);
 }

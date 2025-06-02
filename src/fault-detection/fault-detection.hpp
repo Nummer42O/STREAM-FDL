@@ -30,12 +30,7 @@ public:
   using Alerts = std::vector<Alert>;
 
 private:
-  struct SlidingWindow
-  {
-    bool ready;
-    CircularBuffer raw, filtered;
-  };
-  using AttributeWindow = std::map<Member::AttributeNameType, SlidingWindow>;
+  using AttributeWindow = std::map<Member::AttributeNameType, CircularBuffer>;
   using MemberWindow = std::map<Member::Ptr, AttributeWindow>;
 
 public:
@@ -60,18 +55,9 @@ private:
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
   );
-  static double getZScore(
-    double rawValue,
-    double mean,
-    double stdDev
-  ) { return (rawValue - mean) / stdDev; }
-  static double mahalanobisDistance(
-    const AttributeWindow &correlatedAttributes
-  );
 
 private:
   Watchlist mWatchlist;
-  std::mutex mWatchlistMutex;
   Alerts mAlerts;
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;

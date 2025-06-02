@@ -49,7 +49,6 @@ public:
   bool isFull() const { return mBuffer.size() == mMaxSize; }
 
   metrics_type getMetrics() const;
-  metrics_type getDifferentialMetrics() const;
 
 private:
   size_t mMaxSize;

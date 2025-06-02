@@ -67,19 +67,21 @@ CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
   return beginIt + computedOffset;
 }
 
-static CircularBuffer::metrics_type getMetrics(const CircularBuffer::buffer_type &buffer)
+CircularBuffer::metrics_type CircularBuffer::getMetrics() const
 {
-  const size_t bufferSize = buffer.size();
+  const size_t bufferSize = mBuffer.size();
+  assert(bufferSize >= 1);
+
 
   double mean = std::accumulate(
-    buffer.begin(), buffer.end(), 0.0,
+    mBuffer.begin(), mBuffer.end(), 0.0,
     [](double accumulator, double value) -> double
     {
       return accumulator + value;
     }
   ) / bufferSize;
   double stdDev = std::sqrt(std::accumulate(
-    buffer.begin(), buffer.end(), 0.0,
+    mBuffer.begin(), mBuffer.end(), 0.0,
     [mean](double accumulator, double value) -> double
     {
       return accumulator + (value - mean)*(value - mean);
@@ -88,7 +90,7 @@ static CircularBuffer::metrics_type getMetrics(const CircularBuffer::buffer_type
 
   /*! NOTE: alternative version based on unbiased sample variance
   double stdDev = std::sqrt(std::accumulate(
-    buffer.begin(), buffer.end(), 0.0,
+    mBuffer.begin(), mBuffer.end(), 0.0,
     [bufferSize, mean](double accumulator, double value) -> double
     {
       return accumulator + ((value - mean)*(value - mean) / (bufferSize - 1));
@@ -97,31 +99,6 @@ static CircularBuffer::metrics_type getMetrics(const CircularBuffer::buffer_type
   */
 
   return CircularBuffer::metrics_type{.mean = mean, .stdDev = stdDev};
-}
-
-CircularBuffer::metrics_type CircularBuffer::getMetrics() const
-{
-  assert(mBuffer.size() >= 1);
-
-  return ::getMetrics(mBuffer);
-}
-
-CircularBuffer::metrics_type CircularBuffer::getDifferentialMetrics() const
-{
-  assert(mBuffer.size() >= 2);
-
-  std::vector<double> differences(mBuffer.size() - 1ul);
-  std::transform(
-    mBuffer.begin(), mBuffer.end() - 1,
-    mBuffer.begin() + 1,
-    differences.begin(),
-    [](double olderValue, double newerValue) -> double
-    {
-      return newerValue - olderValue;
-    }
-  );
-
-  return ::getMetrics(differences);
 }
 
 
