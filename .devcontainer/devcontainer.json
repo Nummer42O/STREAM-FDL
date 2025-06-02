@@ -22,7 +22,7 @@
 	],
   // "privileged": true,
 
-  "initializeCommand": "/usr/bin/ssh -T git@github.com; true",
+  "initializeCommand": "ssh-add -L || ssh -T git@github.com; true",
 	"updateRemoteUserUID": false,
 
 	"customizations": {

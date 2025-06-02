@@ -15,7 +15,16 @@ RUN set -x && \
     net-tools iputils-ping \
     nano \
     python3-pip python3-venv \
-    dotnet-runtime-6.0 && \
+    dotnet-runtime-6.0
+RUN set -x && \
+  apt update -y -qq && \
+  apt install -y -qq \
+    libeigen3-dev
+RUN set -x && \
+  apt update -y -qq && \
+  apt install -y -qq \
+    libyaml-cpp-dev
+RUN set -x && \
   apt-get autoremove -y -qq
 
 # non-root user support
