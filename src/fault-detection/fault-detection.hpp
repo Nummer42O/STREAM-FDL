@@ -10,11 +10,13 @@
 
 #include <vector>
 #include <mutex>
+#include <atomic>
 
 
 struct Alert
 {
   Member::Ptr member;
+  Member::AttributeNameType attribute;
   timestamp_t timestamp;
   enum Severity {
     SEVERITY_NORMAL //! TODO
@@ -43,7 +45,9 @@ public:
     const YAML::Node &config
   );
 
-  void run();
+  void run(
+    const std::atomic<bool> &running
+  );
 
   Alerts getEmittedAlerts();
 
@@ -54,6 +58,10 @@ private:
   static void updateAttrWindow(
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
+  );
+  static Alerts detectFaults(
+    Member::Ptr member,
+    const AttributeWindow &window
   );
 
 private:

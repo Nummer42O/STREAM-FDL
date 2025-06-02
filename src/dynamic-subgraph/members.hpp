@@ -30,7 +30,7 @@ public:
   using AttributeMapping = std::map<AttributeNameType, double>;
   using SharedMemory = sharedMem::SHMChannel<sharedMem::Response>;
 
-  using Primary = primaryKey_t;
+  using Primary = std::string;
   //! TODO: only temporary fix for now as vector elements can not be const
   using Ptr = Member *; //const;
 
@@ -47,7 +47,7 @@ protected:
 protected:
   inline Member(
     bool isTopic,
-    primaryKey_t primaryKey
+    Primary primaryKey
   ):
     mIsTopic(isTopic),
     mPrimaryKey(primaryKey)
@@ -63,7 +63,7 @@ public:
 public:
   const bool mIsTopic;
 
-  primaryKey_t mPrimaryKey;
+  Primary     mPrimaryKey;
   Attributes  mAttributes;
 };
 // using MemberPrimary = primaryKey_t;

@@ -34,22 +34,22 @@ private:
 public:
   static Ptr get() { return &smInstance; }
   const Member::Ptr getNode(
-    Member::Primary primary
+    const Member::Primary &primary
   );
-  const Member::Ptr getNode(
+  const Member::Ptr getNodeByName(
     const std::string &name
   );
   void removeNode(
-    Member::Primary primary
+    const Member::Primary &primary
   );
   const Member::Ptr getTopic(
-    Member::Primary primary
+    const Member::Primary &primary
   );
-  const Member::Ptr getTopic(
+  const Member::Ptr getTopicByName(
     const std::string &name
   );
   void removeTopic(
-    Member::Primary primary
+    const Member::Primary &primary
   );
 
   void run();

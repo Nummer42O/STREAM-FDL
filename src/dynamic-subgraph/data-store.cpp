@@ -1,6 +1,7 @@
 #include "dynamic-subgraph/data-store.hpp"
 
 #include "ipc/datastructs/information-datastructs.hpp"
+#include "ipc/util.hpp"
 
 #include <cassert>
 
@@ -15,9 +16,9 @@ Node *DataStore::requestNode(Member::Primary primary, bool updates)
 {
   requestId_t requestId;
   NodeRequest nodeRequest{
-    .primaryKey = primary,
     .updates = updates
   };
+  util::parseString(nodeRequest.primaryKey, primary);
   mIpcClient.sendNodeRequest(nodeRequest, requestId);
 
   std::pair<Nodes::iterator, bool> result = mNodes.emplace(
@@ -37,9 +38,9 @@ Topic *DataStore::requestTopic(Member::Primary primary, bool updates)
 {
   requestId_t requestId;
   TopicRequest topicRequest{
-    .primaryKey = primary,
     .updates = updates
   };
+  util::parseString(topicRequest.primaryKey, primary);
   mIpcClient.sendTopicRequest(topicRequest, requestId);
 
   std::pair<Topics::iterator, bool> result = mTopics.emplace(
@@ -55,7 +56,7 @@ Topic *DataStore::requestTopic(Member::Primary primary, bool updates)
   return &(result.first->second.instance);
 }
 
-const Member::Ptr DataStore::getNode(Member::Primary primary)
+const Member::Ptr DataStore::getNode(const Member::Primary &primary)
 {
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end())
@@ -67,7 +68,7 @@ const Member::Ptr DataStore::getNode(Member::Primary primary)
   return requestNode(primary, true);
 }
 
-const Member::Ptr DataStore::getNode(const std::string &name)
+const Member::Ptr DataStore::getNodeByName(const std::string &name)
 {
   Nodes::iterator nodeIt = std::find_if(
     mNodes.begin(), mNodes.end(),
@@ -86,14 +87,14 @@ const Member::Ptr DataStore::getNode(const std::string &name)
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
 
-  SearchResponse resp = mIpcClient.receiveSearchResponse().value();
-  if (resp.primaryKey == -1)
+  Member::Primary primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  if (primaryKey.empty())
     return nullptr;
   else
-    return requestNode(resp.primaryKey, true);
+    return requestNode(primaryKey, true);
 }
 
-void DataStore::removeNode(Member::Primary primary)
+void DataStore::removeNode(const Member::Primary &primary)
 {
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
@@ -105,7 +106,7 @@ void DataStore::removeNode(Member::Primary primary)
   }
 }
 
-const Member::Ptr DataStore::getTopic(Member::Primary primary)
+const Member::Ptr DataStore::getTopic(const Member::Primary &primary)
 {
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end())
@@ -117,7 +118,7 @@ const Member::Ptr DataStore::getTopic(Member::Primary primary)
   return requestTopic(primary, true);
 }
 
-const Member::Ptr DataStore::getTopic(const std::string &name)
+const Member::Ptr DataStore::getTopicByName(const std::string &name)
 {
   Topics::iterator topicIt = std::find_if(
     mTopics.begin(), mTopics.end(),
@@ -136,14 +137,14 @@ const Member::Ptr DataStore::getTopic(const std::string &name)
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
 
-  SearchResponse resp = mIpcClient.receiveSearchResponse().value();
-  if (resp.primaryKey == -1)
+  Member::Primary primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  if (primaryKey.empty())
     return nullptr;
   else
-    return requestTopic(resp.primaryKey, true);
+    return requestTopic(primaryKey, true);
 }
 
-void DataStore::removeTopic(Member::Primary primary)
+void DataStore::removeTopic(const Member::Primary &primary)
 {
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)
