@@ -5,14 +5,18 @@
 
 class CircularBuffer
 {
-private:
-  using Buffer = std::vector<double>;
+friend class FaultDetection;
 
 public:
   using value_type = double;
-  using iterator = Buffer::iterator;
-  using const_iterator = Buffer::const_iterator;
+  using buffer_type = std::vector<value_type>;
+  using iterator = buffer_type::iterator;
+  using const_iterator = buffer_type::const_iterator;
   using index_type = size_t;
+  struct metrics_type
+  {
+    double mean, stdDev;
+  };
 
 public:
   CircularBuffer(
@@ -25,32 +29,30 @@ public:
   CircularBuffer &operator=(CircularBuffer &&other);
 
   iterator push_back(
-    double value
+    value_type value
   );
 
-  double &at(
+  value_type &at(
     index_type i
   ) { return mBuffer.at(i); }
-  double &operator[](
+  value_type &operator[](
     index_type i
   ) { return mBuffer[i]; }
 
   const_iterator begin() const { return mBuffer.begin(); }
   const_iterator end() const { return mBuffer.end(); }
   const_iterator current() const { return mCurrent; }
+  const_iterator current(ptrdiff_t offset) const;
 
   size_t size() const { return mBuffer.size(); }
   size_t maxSize() const { return mMaxSize; }
   bool isFull() const { return mBuffer.size() == mMaxSize; }
 
+  metrics_type getMetrics() const;
+  metrics_type getDifferentialMetrics() const;
+
 private:
   size_t mMaxSize;
-  Buffer mBuffer;
+  buffer_type mBuffer;
   iterator mCurrent;
 };
-
-using AttributeWindow = std::map<Member::AttributeNameType, CircularBuffer>;
-AttributeWindow createAttrWindow(const Member::AttributeMapping &attributeMapping);
-void updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping);
-
-using MemberWindow = std::map<Member::Ptr, AttributeWindow>;

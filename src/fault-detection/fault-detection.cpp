@@ -2,7 +2,12 @@
 #include "dynamic-subgraph/members.hpp"
 #include "common.hpp"
 
+#include <Eigen/Core>
+
 #include <algorithm>
+
+//! TODO: actual value
+#define CIRCULAR_BUFFER_SIZE 10
 
 
 FaultDetection::FaultDetection(const YAML::Node &config):
@@ -12,7 +17,9 @@ FaultDetection::FaultDetection(const YAML::Node &config):
 
 void FaultDetection::run()
 {
+  // retrieve all members currently on the watchlist
   Members currentWatchlistMembers = mWatchlist.getMembers();
+  // add their attributes to the moving window
   for (Member::Ptr member: currentWatchlistMembers)
   {
     Member::AttributeMapping attributes = member->getAttributes();
@@ -23,6 +30,7 @@ void FaultDetection::run()
     else
       updateAttrWindow(it->second, attributes);
   }
+
 }
 
 FaultDetection::Alerts FaultDetection::getEmittedAlerts()
@@ -33,4 +41,49 @@ FaultDetection::Alerts FaultDetection::getEmittedAlerts()
   //! TODO: add to DB
   mAlerts.clear();
   return output;
+}
+
+FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::AttributeMapping &attributeMapping)
+{
+  AttributeWindow attrWindow;
+  for (const Member::AttributeMapping::value_type &entry: attributeMapping)
+  {
+    CircularBuffer rawAttributes(CIRCULAR_BUFFER_SIZE);
+    rawAttributes.push_back(entry.second);
+    attrWindow.emplace(
+      entry.first,
+      SlidingWindow{
+        .ready = false,
+        .raw = std::move(rawAttributes),
+        .filtered = CircularBuffer(CIRCULAR_BUFFER_SIZE)
+      }
+    );
+  }
+  return attrWindow;
+}
+
+void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping)
+{
+  for (const Member::AttributeMapping::value_type &entry: attributeMapping)
+  {
+    SlidingWindow &slidingWindow = window.at(entry.first);
+
+    // if we have "enough" raw values, start filtering
+    if (slidingWindow.ready || slidingWindow.raw.isFull())
+    {
+      slidingWindow.ready = true;
+      auto [mean, stdDev] = slidingWindow.raw.getDifferentialMetrics();
+      double lastValue = *slidingWindow.raw.current(-1);
+      slidingWindow.filtered.push_back(getZScore(mean, stdDev, (entry.second - lastValue)));
+    }
+
+    // append raw value
+    slidingWindow.raw.push_back(entry.second);
+  }
+}
+
+double FaultDetection::mahalanobisDistance(const AttributeWindow &correlatedAttributes)
+{
+  Eigen::MatrixXd covarianceMatrix(correlatedAttributes.size(), correlatedAttributes.size());
+  //! TODO: CONTINUE
 }

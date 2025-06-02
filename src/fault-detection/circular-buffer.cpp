@@ -1,15 +1,15 @@
 #include "fault-detection/circular-buffer.hpp"
 
 #include <cassert>
-
-//! TODO: actual value
-#define CIRCULAR_BUFFER_MAX_SIZE 10
+#include <numeric>
+#include <cmath>
+#include <algorithm>
 
 
 CircularBuffer::CircularBuffer(size_t maxSize):
   mMaxSize(maxSize)
 {
-  assert(mMaxSize > 0);
+  assert(mMaxSize >= 2);
   mCurrent = mBuffer.begin();
 }
 
@@ -44,7 +44,7 @@ CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
   return *this;
 }
 
-CircularBuffer::iterator CircularBuffer::push_back(double value)
+CircularBuffer::iterator CircularBuffer::push_back(value_type value)
 {
   iterator it = mBuffer.insert(mCurrent++, value);
   if (mCurrent == mBuffer.end() &&
@@ -54,23 +54,74 @@ CircularBuffer::iterator CircularBuffer::push_back(double value)
   return it;
 }
 
-
-AttributeWindow createAttrWindow(const Member::AttributeMapping &attributeMapping)
+CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
 {
-  AttributeWindow attrWindow;
-  for (const Member::AttributeMapping::value_type &entry: attributeMapping)
-  {
-    CircularBuffer cb(CIRCULAR_BUFFER_MAX_SIZE);
-    cb.push_back(entry.second);
-    attrWindow.emplace(entry.first, std::move(cb));
-  }
-  return attrWindow;
+  const_iterator beginIt = mBuffer.begin();
+  ptrdiff_t currentOffset = mCurrent - beginIt;
+
+  const size_t bufferSize = mBuffer.size();
+  ptrdiff_t computedOffset = (currentOffset + offset) % bufferSize;
+  if (computedOffset < 0)
+    computedOffset += bufferSize;
+
+  return beginIt + computedOffset;
 }
 
-void updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping)
+static CircularBuffer::metrics_type getMetrics(const CircularBuffer::buffer_type &buffer)
 {
-  for (const Member::AttributeMapping::value_type &entry: attributeMapping)
-  {
-    window.at(entry.first).push_back(entry.second);
-  }
+  const size_t bufferSize = buffer.size();
+
+  double mean = std::accumulate(
+    buffer.begin(), buffer.end(), 0.0,
+    [](double accumulator, double value) -> double
+    {
+      return accumulator + value;
+    }
+  ) / bufferSize;
+  double stdDev = std::sqrt(std::accumulate(
+    buffer.begin(), buffer.end(), 0.0,
+    [mean](double accumulator, double value) -> double
+    {
+      return accumulator + (value - mean)*(value - mean);
+    }
+  ) / bufferSize);
+
+  /*! NOTE: alternative version based on unbiased sample variance
+  double stdDev = std::sqrt(std::accumulate(
+    buffer.begin(), buffer.end(), 0.0,
+    [bufferSize, mean](double accumulator, double value) -> double
+    {
+      return accumulator + ((value - mean)*(value - mean) / (bufferSize - 1));
+    }
+  ));
+  */
+
+  return CircularBuffer::metrics_type{.mean = mean, .stdDev = stdDev};
 }
+
+CircularBuffer::metrics_type CircularBuffer::getMetrics() const
+{
+  assert(mBuffer.size() >= 1);
+
+  return ::getMetrics(mBuffer);
+}
+
+CircularBuffer::metrics_type CircularBuffer::getDifferentialMetrics() const
+{
+  assert(mBuffer.size() >= 2);
+
+  std::vector<double> differences(mBuffer.size() - 1ul);
+  std::transform(
+    mBuffer.begin(), mBuffer.end() - 1,
+    mBuffer.begin() + 1,
+    differences.begin(),
+    [](double olderValue, double newerValue) -> double
+    {
+      return newerValue - olderValue;
+    }
+  );
+
+  return ::getMetrics(differences);
+}
+
+
