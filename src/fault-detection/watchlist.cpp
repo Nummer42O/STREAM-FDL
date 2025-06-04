@@ -59,8 +59,6 @@ Members Watchlist::getMembers()
       if (element.second != TYPE_BLINDSPOT)
         return false;
 
-      //! TODO: muss anders, blindspot muss durch window
-
       removeMember(element);
       return true;
     }

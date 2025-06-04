@@ -13,8 +13,9 @@ using namespace std::chrono_literals;
 #define WAIT_TIME 100ms
 
 
-FaultDetection::FaultDetection(const YAML::Node &config):
-  mWatchlist(config[CONFIG_WL_INITIAL_MEMBERS]),
+//! NOTE: reenable parameter when moving from macros to config
+FaultDetection::FaultDetection(const YAML::Node &/*config*/, Watchlist *watchlist):
+  mpWatchlist(watchlist),
   mpDataStore(DataStore::get())
 {}
 
@@ -23,7 +24,7 @@ void FaultDetection::run(const std::atomic<bool> &running)
   while (running.load())
   {
     // retrieve all members currently on the watchlist
-    Members currentWatchlistMembers = mWatchlist.getMembers();
+    Members currentWatchlistMembers = mpWatchlist->getMembers();
     // add their attributes to the moving window
     for (Member::Ptr member: currentWatchlistMembers)
     {
@@ -36,15 +37,21 @@ void FaultDetection::run(const std::atomic<bool> &running)
         updateAttrWindow(it->second, attributes);
     }
 
-    for (const MemberWindow::value_type &members: mMovingWindow)
+    for (const MemberWindow::value_type &memberAttributes: mMovingWindow)
     {
-      Alerts alerts = detectFaults(members.first, members.second);
-      if (alerts.empty())
+      // if there ain't enough attribute values, skip
+      //! NOTE: the first attribute is selected as representing all,
+      //!       since all attribute buffers theoretically grow in parallel
+      if (!memberAttributes.second.begin()->second.full())
+        continue;
+      mpWatchlist->notifyUsed(memberAttributes.first);
+
+      Alert alert;
+      if (!detectFaults(memberAttributes.first, memberAttributes.second, alert))
         continue;
 
       mAlertMutex.lock();
-      mAlerts.reserve(mAlerts.size() + alerts.size());
-      std::move(alerts.begin(), alerts.end(), std::back_inserter(mAlerts));
+      mAlerts.push_back(alert);
       mAlertMutex.unlock();
     }
 
@@ -68,7 +75,7 @@ FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::A
   for (const Member::AttributeMapping::value_type &entry: attributeMapping)
   {
     CircularBuffer rawAttributes(CIRCULAR_BUFFER_SIZE);
-    rawAttributes.push_back(entry.second);
+    rawAttributes.push(entry.second);
     attrWindow.emplace(
       entry.first,
       std::move(rawAttributes)
@@ -80,24 +87,28 @@ FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::A
 void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping)
 {
   for (const Member::AttributeMapping::value_type &entry: attributeMapping)
-    window.at(entry.first).push_back(entry.second);
+    window.at(entry.first).push(entry.second);
 }
 
-FaultDetection::Alerts FaultDetection::detectFaults(Member::Ptr member, const AttributeWindow &window)
+bool FaultDetection::detectFaults(Member::Ptr member, const AttributeWindow &window, Alert &oAlert)
 {
-  std::vector<Alert> output;
+  oAlert.timestamp = cr::system_clock::now();
+  oAlert.severity = Alert::SEVERITY_NORMAL;
+  if (!member->mIsTopic && !static_cast<const Node *const>(member)->mAlive)
+    return true;
+
   for (const AttributeWindow::value_type &attr: window)
   {
-    auto [mean, stdDev] = attr.second.getMetrics();
+    if (attr.second.empty())
+      continue;
+
+    double
+      mean = attr.second.getMean(),
+      stdDev = attr.second.getStdDev(mean);
     double currentValue = *attr.second.current();
     if (mean - 3 * stdDev > currentValue ||
         mean + 3 * stdDev < currentValue)
-      output.push_back(Alert{
-        .member = member,
-        .attribute = attr.first,
-        .timestamp = cr::system_clock::now(),
-        .severity = Alert::SEVERITY_NORMAL
-      });
+      oAlert.affectedAttributes.push_back(attr.first);
   }
-  return output;
+  return !oAlert.affectedAttributes.empty();
 }

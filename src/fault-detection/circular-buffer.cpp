@@ -44,7 +44,7 @@ CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
   return *this;
 }
 
-CircularBuffer::iterator CircularBuffer::push_back(value_type value)
+CircularBuffer::iterator CircularBuffer::push(value_type value)
 {
   iterator it = mBuffer.insert(mCurrent++, value);
   if (mCurrent == mBuffer.end() &&
@@ -67,11 +67,10 @@ CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
   return beginIt + computedOffset;
 }
 
-CircularBuffer::metrics_type CircularBuffer::getMetrics() const
+double CircularBuffer::getMean() const
 {
   const size_t bufferSize = mBuffer.size();
   assert(bufferSize >= 1);
-
 
   double mean = std::accumulate(
     mBuffer.begin(), mBuffer.end(), 0.0,
@@ -80,6 +79,15 @@ CircularBuffer::metrics_type CircularBuffer::getMetrics() const
       return accumulator + value;
     }
   ) / bufferSize;
+
+  return mean;
+}
+
+double CircularBuffer::getStdDev(double mean) const
+{
+  const size_t bufferSize = mBuffer.size();
+  assert(bufferSize >= 1);
+
   double stdDev = std::sqrt(std::accumulate(
     mBuffer.begin(), mBuffer.end(), 0.0,
     [mean](double accumulator, double value) -> double
@@ -98,7 +106,7 @@ CircularBuffer::metrics_type CircularBuffer::getMetrics() const
   ));
   */
 
-  return CircularBuffer::metrics_type{.mean = mean, .stdDev = stdDev};
+  return stdDev;
 }
 
 

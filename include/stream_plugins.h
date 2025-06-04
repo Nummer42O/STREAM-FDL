@@ -12,7 +12,7 @@
 #define INITIALIZE_FUNCTION_SIGNATURE(name) \
   bool name ()
 #define EXECUTE_FUNCTION_SIGNATURE(name) \
-  ErrorDescription name (void *data)
+  FaultState name (DataHeader header, void *data)
 #define DEINITIALIZE_FUNCTION_SIGNATURE(name) \
   void name ()
 
@@ -24,6 +24,16 @@
   extern "C" DEINITIALIZE_FUNCTION_SIGNATURE(_DEINITIALIZE_SYMBOL)
 
 
-struct ErrorDescription {
-  //! TODO
+struct DataHeader
+{
+  std::string name, type;
+  size_t dataSize;
+};
+
+enum FaultState
+{
+  STATE_FAULTY,
+  STATE_NORMAL,
+  STATE_UNDETERMINED,
+  _STATE_NULL_OPT
 };

@@ -16,7 +16,7 @@
 struct Alert
 {
   Member::Ptr member;
-  Member::AttributeNameType attribute;
+  std::vector<Member::AttributeNameType> affectedAttributes;
   timestamp_t timestamp;
   enum Severity {
     SEVERITY_NORMAL //! TODO
@@ -42,7 +42,8 @@ public:
    * @param config json subconfiguration object
    */
   FaultDetection(
-    const YAML::Node &config
+    const YAML::Node &config,
+    Watchlist *watchlist
   );
 
   void run(
@@ -59,13 +60,14 @@ private:
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
   );
-  static Alerts detectFaults(
+  static bool detectFaults(
     Member::Ptr member,
-    const AttributeWindow &window
+    const AttributeWindow &window,
+    Alert &oAlert
   );
 
 private:
-  Watchlist mWatchlist;
+  Watchlist *const mpWatchlist;
   Alerts mAlerts;
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;

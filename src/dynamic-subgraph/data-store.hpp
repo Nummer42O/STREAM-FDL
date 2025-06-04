@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dynamic-subgraph/members.hpp"
+#include "dynamic-subgraph/graph.hpp"
 
 #include "ipc/common.hpp"
 #include "ipc/datastructs/information-datastructs.hpp"
@@ -11,6 +12,7 @@
 #include <string_view>
 #include <memory>
 #include <vector>
+#include <atomic>
 
 #define PROJECT_ID  0
 
@@ -18,7 +20,7 @@
 class DataStore
 {
 public:
-  using Ptr = DataStore *const; // std::shared_ptr<DataStore>;
+  using Ptr = DataStore *; // std::shared_ptr<DataStore>;
 
 private:
   template<typename T>
@@ -33,6 +35,7 @@ private:
 
 public:
   static Ptr get() { return &smInstance; }
+
   const Member::Ptr getNode(
     const Member::Primary &primary
   );
@@ -52,7 +55,12 @@ public:
     const Member::Primary &primary
   );
 
-  void run();
+  Graph getFullGraphView() const;
+
+  //! TODO: implement
+  void run(
+    const std::atomic<bool> &running
+  );
 
 private:
   DataStore();
@@ -72,5 +80,5 @@ private:
   Topics        mTopics;
   IpcClient     mIpcClient;
 
-  static DataStore  smInstance;
+  static DataStore smInstance;
 };

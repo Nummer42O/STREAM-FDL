@@ -9,6 +9,9 @@ namespace cr = std::chrono;
 
 
 #define CONFIG_WL_INITIAL_MEMBERS "initial-members"
+#define CONFIG_WATCHLIST          "watchlist-config"
+
+#define MAKE_RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}
 
 
 using timestamp_t = cr::sys_time<cr::system_clock::duration>;

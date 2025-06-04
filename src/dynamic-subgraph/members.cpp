@@ -1,11 +1,12 @@
 #include "dynamic-subgraph/members.hpp"
+
+#include "common.hpp"
+
 #include "ipc/util.hpp"
 
 #include <chrono>
 namespace cr = std::chrono;
 #include <cassert>
-
-#define RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}
 
 
 Member::AttributeMapping Member::getAttributes()
@@ -13,10 +14,12 @@ Member::AttributeMapping Member::getAttributes()
   AttributeMapping output;
   for (Attribute &attribute: mAttributes)
   {
-    sharedMem::Response shmResponse = RESPONSE;
+    sharedMem::Response shmResponse = MAKE_RESPONSE;
     if (attribute.sharedMemory.receive(shmResponse, false))
+    {
       assert(shmResponse.header.type == sharedMem::NUMERICAL);
       attribute.lastValue = shmResponse.numerical.value;
+    }
     output.emplace(attribute.name, attribute.lastValue);
   }
   return output;
@@ -25,7 +28,7 @@ Member::AttributeMapping Member::getAttributes()
 void Member::addAttributeSource(int attributeName, const SingleAttributesResponse &response)
 {
   SharedMemory shm(util::parseString(response.memAddress));
-  sharedMem::Response shmResponse = RESPONSE;
+  sharedMem::Response shmResponse = MAKE_RESPONSE;
   shm.receive(shmResponse);
   assert(shmResponse.header.type == sharedMem::NUMERICAL);
 
@@ -44,20 +47,20 @@ void Node::update(const NodeIsServerForUpdate &update)
   if (it == mClients.end())
     mClients.emplace(serviceName, Clients({update.clientNodeId}));
   else
-    it->second.insert(update.clientNodeId);
+    it->second.push_back(update.clientNodeId);
 }
 
-inline void Node::update(const NodeIsActionServerForUpdate &update)
+void Node::update(const NodeIsActionServerForUpdate &update)
 {
   std::string serviceName(util::parseString(update.srvName));
   ClientMapping::iterator it = mClients.find(serviceName);
   if (it == mClients.end())
     mClients.emplace(serviceName, Clients({update.actionclientNodeId}));
   else
-    it->second.insert(update.actionclientNodeId);
+    it->second.push_back(update.actionclientNodeId);
 }
 
-inline void Node::update(const NodeStateUpdate &update)
+void Node::update(const NodeStateUpdate &update)
 {
   bool isAliveNow = (update.state == sharedMem::State::ACTIVE);
   if (isAliveNow != mAlive)

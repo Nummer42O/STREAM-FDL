@@ -5,4 +5,5 @@ target_sources(main
     fault-detection.cpp
     watchlist.cpp
     circular-buffer.cpp
+    # plugin-manager.cpp
 )

@@ -13,10 +13,6 @@ public:
   using iterator = buffer_type::iterator;
   using const_iterator = buffer_type::const_iterator;
   using index_type = size_t;
-  struct metrics_type
-  {
-    double mean, stdDev;
-  };
 
 public:
   CircularBuffer(
@@ -28,7 +24,7 @@ public:
   CircularBuffer(CircularBuffer &&other);
   CircularBuffer &operator=(CircularBuffer &&other);
 
-  iterator push_back(
+  iterator push(
     value_type value
   );
 
@@ -46,9 +42,13 @@ public:
 
   size_t size() const { return mBuffer.size(); }
   size_t maxSize() const { return mMaxSize; }
-  bool isFull() const { return mBuffer.size() == mMaxSize; }
+  bool full() const { return mBuffer.size() == mMaxSize; }
+  bool empty() const { return mBuffer.empty(); }
 
-  metrics_type getMetrics() const;
+  double getMean() const;
+  double getStdDev(
+    double mean
+  ) const;
 
 private:
   size_t mMaxSize;

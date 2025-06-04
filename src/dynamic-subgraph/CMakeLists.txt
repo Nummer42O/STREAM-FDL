@@ -5,4 +5,5 @@ target_sources(main
     dynamic-subgraph.cpp
     data-store.cpp
     members.cpp
+    graph.cpp
 )

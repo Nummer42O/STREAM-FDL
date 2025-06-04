@@ -13,7 +13,6 @@ namespace cr = std::chrono;
 #include <chrono>
 #include <vector>
 #include <map>
-#include <set>
 
 
 //! TODO: are those forward declarations still necessary?
@@ -24,6 +23,7 @@ class Topic;
 class Member
 {
 friend class DataStore;
+friend class Graph;
 
 public:
   using AttributeNameType = int;
@@ -69,25 +69,26 @@ public:
 // using MemberPrimary = primaryKey_t;
 // using MemberPtr = Member *const;
 using Members = std::vector<Member::Ptr>;
-using MemberIds = std::set<Member::Primary>;
+using MemberIds = std::vector<Member::Primary>;
 
 
 class Node: public Member
 {
 friend class DataStore;
+friend class Graph;
 
 public:
   using ServiceMapping = std::map<std::string, Member::Primary>;
-  using Clients = std::set<Member::Primary>;
+  using Clients = MemberIds;
   using ClientMapping = std::map<std::string, Clients>;
 
 public:
   void update(
     const NodePublishersToUpdate &update
-  ) { mPublishesTo.insert(update.publishesTo); }
+  ) { mPublishesTo.push_back(update.publishesTo); }
   void update(
     const NodeSubscribersToUpdate &update
-  ) { mSubrscribesTo.insert(update.subscribesTo); }
+  ) { mSubscribesTo.push_back(update.subscribesTo); }
   void update(
     const NodeIsServerForUpdate &update
   );
@@ -123,21 +124,22 @@ private:
   ServiceMapping  mServers, // Node listens to other services with those servers
                   mActionServers; // Node listens to other services for actions with those servers
   MemberIds       mPublishesTo,
-                  mSubrscribesTo;
+                  mSubscribesTo;
 };
 
 
 class Topic: public Member
 {
 friend class DataStore;
+friend class Graph;
 
 public:
   void update(
     const TopicPublishersUpdate &update
-  ) { mPublishers.insert(update.publisher); }
+  ) { mPublishers.push_back(update.publisher); }
   void update(
     const TopicSubscribersUpdate &update
-  ) { mSubscribers.insert(update.subscriber); }
+  ) { mSubscribers.push_back(update.subscriber); }
 
 private:
   Topic(
