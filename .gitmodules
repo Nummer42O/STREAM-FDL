@@ -1,3 +1,6 @@
 [submodule "src/3rd/stream-ipc"]
 	path = src/3rd/stream-ipc
 	url = git@github.com:Nummer42O/STREAM-IPC.git
+[submodule "src/3rd/json"]
+	path = src/3rd/json
+	url = git@github.com:nlohmann/json.git
