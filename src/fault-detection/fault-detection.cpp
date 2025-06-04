@@ -9,20 +9,25 @@ using namespace std::chrono_literals;
 #include <thread>
 
 //! TODO: actual value
-#define CIRCULAR_BUFFER_SIZE 10
-#define WAIT_TIME 100ms
+//#define CIRCULAR_BUFFER_SIZE 10
+//#define WAIT_TIME 100ms
 
 
 //! NOTE: reenable parameter when moving from macros to config
-FaultDetection::FaultDetection(const YAML::Node &/*config*/, Watchlist *watchlist):
+FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, DataStore::Ptr dataStorePtr):
   mpWatchlist(watchlist),
-  mpDataStore(DataStore::get())
+  mpDataStore(dataStorePtr),
+  cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
+  cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
 {}
 
 void FaultDetection::run(const std::atomic<bool> &running)
 {
+  timestamp_t start, stop;
   while (running.load())
   {
+    start = cr::system_clock::now();
+
     // retrieve all members currently on the watchlist
     Members currentWatchlistMembers = mpWatchlist->getMembers();
     // add their attributes to the moving window
@@ -55,7 +60,10 @@ void FaultDetection::run(const std::atomic<bool> &running)
       mAlertMutex.unlock();
     }
 
-    std::this_thread::sleep_for(WAIT_TIME);
+    stop = cr::system_clock::now();
+    cr::milliseconds remainingTime = cmLoopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    if (remainingTime > 0ms)
+      std::this_thread::sleep_for(remainingTime);
   }
 }
 
@@ -69,12 +77,12 @@ FaultDetection::Alerts FaultDetection::getEmittedAlerts()
   return output;
 }
 
-FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::AttributeMapping &attributeMapping)
+FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::AttributeMapping &attributeMapping) const
 {
   AttributeWindow attrWindow;
   for (const Member::AttributeMapping::value_type &entry: attributeMapping)
   {
-    CircularBuffer rawAttributes(CIRCULAR_BUFFER_SIZE);
+    CircularBuffer rawAttributes(cmMovingWindowSize);
     rawAttributes.push(entry.second);
     attrWindow.emplace(
       entry.first,

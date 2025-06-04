@@ -3,7 +3,8 @@
 #include "dynamic-subgraph/members.hpp"
 #include "dynamic-subgraph/data-store.hpp"
 
-#include <yaml-cpp/yaml.h>
+#include "nlohmann/json.hpp"
+namespace json = nlohmann;
 
 #include <map>
 #include <vector>
@@ -23,7 +24,8 @@ private:
 
 public:
   Watchlist(
-    const YAML::Node &config
+    const json::json &config,
+    DataStore::Ptr dataStorePtr
   );
 
   void addMember(Member::Ptr member, WatchlistMemberType type = TYPE_NORMAL);

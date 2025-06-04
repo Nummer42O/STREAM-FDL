@@ -10,10 +10,8 @@ namespace json = nlohmann;
 #include <optional>
 
 
-DataStore DataStore::smInstance = DataStore();
-
-DataStore::DataStore():
-  mIpcClient(IpcClient(PROJECT_ID))
+DataStore::DataStore(const json::json &config):
+  mIpcClient(IpcClient(config.at(CONFIG_PROJECT_ID)))
 {}
 
 Node *DataStore::requestNode(Member::Primary primary, bool updates)

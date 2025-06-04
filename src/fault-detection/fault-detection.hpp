@@ -6,11 +6,14 @@
 #include "fault-detection/circular-buffer.hpp"
 #include "common.hpp"
 
-#include <yaml-cpp/yaml.h>
+#include "nlohmann/json.hpp"
+namespace json = nlohmann;
 
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <chrono>
+namespace cr = std::chrono;
 
 
 struct Alert
@@ -42,8 +45,9 @@ public:
    * @param config json subconfiguration object
    */
   FaultDetection(
-    const YAML::Node &config,
-    Watchlist *watchlist
+    const json::json &config,
+    Watchlist *watchlist,
+    DataStore::Ptr dataStorePtr
   );
 
   void run(
@@ -53,9 +57,9 @@ public:
   Alerts getEmittedAlerts();
 
 private:
-  static AttributeWindow createAttrWindow(
+  AttributeWindow createAttrWindow(
     const Member::AttributeMapping &attributeMapping
-  );
+  ) const;
   static void updateAttrWindow(
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
@@ -72,4 +76,7 @@ private:
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;
   DataStore::Ptr mpDataStore;
+
+  const cr::milliseconds cmLoopTargetInterval;
+  const size_t cmMovingWindowSize;
 };

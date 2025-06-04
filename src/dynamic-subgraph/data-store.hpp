@@ -8,13 +8,16 @@
 #include "ipc/sharedMem.hpp"
 #include "ipc/ipc-client.hpp"
 
+#include "nlohmann/json.hpp"
+namespace json = nlohmann;
+
 #include <string>
 #include <string_view>
 #include <memory>
 #include <vector>
 #include <atomic>
 
-#define PROJECT_ID  0
+//#define PROJECT_ID  0
 
 
 class DataStore
@@ -34,7 +37,9 @@ private:
   using Topics = std::map<Member::Primary, MemberData<Topic>>;
 
 public:
-  static Ptr get() { return &smInstance; }
+  DataStore(
+    const json::json &config
+  );
 
   const Member::Ptr getNode(
     const Member::Primary &primary
@@ -63,8 +68,6 @@ public:
   );
 
 private:
-  DataStore();
-
   Node *requestNode(
     Member::Primary primary,
     bool updates

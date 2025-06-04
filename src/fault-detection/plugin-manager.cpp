@@ -146,7 +146,7 @@ FaultState PluginManager::execute(std::string_view pluginName, void *data)
 
   //! TODO: make name-independent function that executes plugin with data
   //!       using information from configuration file
-  return plugin.execute(data);
+  // return plugin.execute(data);
 }
 
 void PluginManager::deinitialize(bool skipDeinitialized)

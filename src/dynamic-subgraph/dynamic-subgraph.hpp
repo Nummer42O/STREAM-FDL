@@ -7,7 +7,8 @@
 #include "fault-detection/circular-buffer.hpp"
 #include "fault-trajectory-extraction/fault-trajectory-extraction.hpp"
 
-#include <yaml-cpp/yaml.h>
+#include "nlohmann/json.hpp"
+namespace json = nlohmann;
 
 #include <atomic>
 
@@ -24,7 +25,8 @@ public:
    * @param config json configuration object
    */
   DynamicSubgraphBuilder(
-    const YAML::Node &config
+    const json::json &config,
+    DataStore::Ptr dataStorePtr
   );
 
   void run(
@@ -43,13 +45,16 @@ private:
   );
 
 private:
+  Watchlist                 mWatchlist;
   FaultDetection            mFD;
   FaultTrajectoryExtraction mFTE;
-  Watchlist                 mWatchlist;
   Graph                     mSAG;
   DataStore::Ptr            mpDataStore;
 
   bool                      mSomethingIsGoingOn;
   CircularBuffer            mLastNrAlerts;
   size_t                    mBlindSpotCheckCounter;
+
+  const size_t              cmBlindspotInterval;
+  const double              cmAbortionCriteriaThreshold;
 };

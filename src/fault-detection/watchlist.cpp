@@ -4,13 +4,13 @@
 #include <algorithm>
 
 
-Watchlist::Watchlist(const YAML::Node &config):
-  mpDataStore(DataStore::get())
+Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
+  mpDataStore(dataStorePtr)
 {
-  if (!config.IsSequence())
-    throw ConfigurationError(config.Tag(), config.Type(), YAML::NodeType::Sequence);
-
-  mInitialMemberNames = config.as<std::vector<std::string>>();
+  if (config.is_null() ||
+      (config.is_array() && config.empty()))
+    return;
+  config.get_to(mInitialMemberNames);
 }
 
 void Watchlist::addMember(Member::Ptr member, WatchlistMemberType type)

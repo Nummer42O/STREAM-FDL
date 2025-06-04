@@ -3,18 +3,20 @@
 #include <thread>
 
 //! TODO: actual values
-#define ALERT_RATE_NORMALISATION_WINDOW_SIZE 10ul
-#define BLINDSPOT_CHECK_ITERATION_INTERVAL 15ul
-#define ABORT_CRITERIA_ALERT_RATE_THRESHOLD 0.05
+//#define ALERT_RATE_NORMALISATION_WINDOW_SIZE 10ul
+//#define BLINDSPOT_CHECK_ITERATION_INTERVAL 15ul
+//#define ABORT_CRITERIA_ALERT_RATE_THRESHOLD 0.05
 
 
-DynamicSubgraphBuilder::DynamicSubgraphBuilder(const YAML::Node &config):
-  mFD(config[CONFIG_WATCHLIST], &mWatchlist),
-  mWatchlist(config[CONFIG_WL_INITIAL_MEMBERS]),
-  mpDataStore(DataStore::get()),
+DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
+  mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
+  mFD(config.at(CONFIG_FAULT_DETECTION), &mWatchlist, dataStorePtr),
+  mpDataStore(dataStorePtr),
   mSomethingIsGoingOn(false),
-  mLastNrAlerts(ALERT_RATE_NORMALISATION_WINDOW_SIZE),
-  mBlindSpotCheckCounter(0ul)
+  mLastNrAlerts(config.at(CONFIG_ALERT_RATE).at(CONFIG_NR_NORMALISATION_VALUES).get<size_t>()),
+  mBlindSpotCheckCounter(0ul),
+  cmBlindspotInterval(config.at(CONFIG_BLINDSPOT_INTERVAL).get<size_t>()),
+  cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>())
 {}
 
 void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
@@ -26,7 +28,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
   {
     if (mBlindSpotCheckCounter == 0ul)
       blindSpotCheck();
-    mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % BLINDSPOT_CHECK_ITERATION_INTERVAL;
+    mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
 
     Alerts emittedAlerts = mFD.getEmittedAlerts();
     expandSubgraph(emittedAlerts);
@@ -101,11 +103,11 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   if (!mSomethingIsGoingOn)
   {
     // …check whether the mean exceeds the threshold, i.e. we start building the subgraph
-    if (meanNewAlerts > ABORT_CRITERIA_ALERT_RATE_THRESHOLD)
+    if (meanNewAlerts > cmAbortionCriteriaThreshold)
       mSomethingIsGoingOn = true;
     // regardless of the above, in this state we definetly won't abort as there is nothing to abort yet
     return false;
   }
   // if we are investigating a failure, return wether the mean has dropped below the threshold
-  return (meanNewAlerts <= ABORT_CRITERIA_ALERT_RATE_THRESHOLD);
+  return (meanNewAlerts <= cmAbortionCriteriaThreshold);
 }

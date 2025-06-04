@@ -1,0 +1,13 @@
+{
+  "project-id": 0,
+  "alert-rate": {
+    "nr-normalisation-values": 10,
+    "abortion-criteria-threshold": 0.05
+  },
+  "blindspot-interval": 15,
+  "initial-watchlist-members": [],
+  "fault-detection": {
+    "moving-window-size": 10,
+    "target-frequency": 10.0
+  }
+}

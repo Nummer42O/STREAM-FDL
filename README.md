@@ -17,6 +17,7 @@ Fault Detection and Localization Module for STREAM Pipeline.
 - Alerts:
   - severities?
   - DB
+- adopt pub/sub edge frequencies over topic frequency from latest IPC
 
 ## low priority
 - rethink some of the move semantics
