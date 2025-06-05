@@ -320,6 +320,8 @@ Graph DataStore::getFullGraphView() const
 
 void DataStore::run(const std::atomic<bool> &running)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(running.load()))
+
   while (running.load())
   {
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);

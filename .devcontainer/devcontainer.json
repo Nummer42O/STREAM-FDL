@@ -9,7 +9,7 @@
       "USERNAME": "johannes"
     },
     "mounts": [
-      "type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix",
+      "type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix"
     ]
 	},
   "workspaceMount": "type=bind,src=${localWorkspaceFolder},dst=/home/johannes/stream-fdl",
