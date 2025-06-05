@@ -25,7 +25,7 @@ Member::AttributeMapping Member::getAttributes()
   return output;
 }
 
-void Member::addAttributeSource(int attributeName, const SingleAttributesResponse &response)
+void Member::addAttributeSource(const AttributeDescriptor &attributeName, const SingleAttributesResponse &response)
 {
   SharedMemory shm(util::parseString(response.memAddress));
   sharedMem::Response shmResponse = MAKE_RESPONSE;

@@ -10,13 +10,27 @@ const Graph::Vertex *Graph::add(Member::Ptr member)
     return nullptr;
 
   Vertex vertex;
-  if (member->mIsTopic)
+  if (member->cmIsTopic)
   {
     auto topic = static_cast<const Topic *>(member);
 
     vertex.type = Vertex::TYPE_NODE;
-    vertex.incoming = topic->mPublishers;
-    vertex.outgoing = topic->mSubscribers;
+    std::transform(
+      topic->mPublishers.begin(), topic->mPublishers.end(),
+      std::back_inserter(vertex.incoming),
+      [](const Topic::Edges::value_type &edge) -> MemberIds::value_type
+      {
+        return edge.node;
+      }
+    );
+    std::transform(
+      topic->mSubscribers.begin(), topic->mSubscribers.end(),
+      std::back_inserter(vertex.outgoing),
+      [](const Topic::Edges::value_type &edge) -> MemberIds::value_type
+      {
+        return edge.node;
+      }
+    );
   }
   else
   {
@@ -52,7 +66,7 @@ const Graph::Vertex *Graph::add(Member::Ptr member)
   return &(emplacedIt->second);
 }
 
-const Graph::Vertex *Graph::get(const Member::Primary &primary) const
+const Graph::Vertex *Graph::get(const PrimaryKey &primary) const
 {
   Vertices::const_iterator it = mVertices.find(primary);
   if (it != mVertices.end())
@@ -61,7 +75,7 @@ const Graph::Vertex *Graph::get(const Member::Primary &primary) const
   return nullptr;
 }
 
-const Graph::Vertex *Graph::add(Member::Primary primary, Vertex vertex)
+const Graph::Vertex *Graph::add(PrimaryKey primary, Vertex vertex)
 {
   Vertices::iterator it = mVertices.find(primary);
   if (it != mVertices.end())
@@ -79,7 +93,7 @@ static void getBlindspotsInternal(
 )
 {
   // get outgoing edges (and their count) for currently observed vertex
-  const Member::Primary &currentVertex = currentPath.back();
+  const PrimaryKey &currentVertex = currentPath.back();
   const MemberIds &outgoingEdges = graph.get(currentVertex)->outgoing;
   size_t nrOutgoingEdges = outgoingEdges.size();
 
@@ -93,7 +107,7 @@ static void getBlindspotsInternal(
   }
 
   // if there are outgoing edges, investigate all vertices they lead to
-  for (const Member::Primary &outgoingEdgeTo: outgoingEdges)
+  for (const PrimaryKey &outgoingEdgeTo: outgoingEdges)
   {
     // if the vertex has been visited already, ignore it
     MemberIds::const_iterator it = std::find(ioAllVertices.begin(), ioAllVertices.end(), outgoingEdgeTo);
@@ -124,7 +138,7 @@ MemberIds getBlindspots(const Graph &graph)
   // visited vertices get removed, so initiate searches until there are no more unchecked vertices
   while (!allVertices.empty())
   {
-    Member::Primary vertex = allVertices.back();
+    PrimaryKey vertex = allVertices.back();
     allVertices.pop_back();
     getBlindspotsInternal(graph, {vertex}, allVertices, blindspots);
   }

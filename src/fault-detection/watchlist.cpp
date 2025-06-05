@@ -118,7 +118,7 @@ void Watchlist::tryInitialise()
 
 void Watchlist::removeMember(const InternalMembers::value_type &element)
 {
-  if (element.first->mIsTopic)
+  if (element.first->cmIsTopic)
     mpDataStore->removeTopic(element.first->mPrimaryKey);
   else
     mpDataStore->removeNode(element.first->mPrimaryKey);

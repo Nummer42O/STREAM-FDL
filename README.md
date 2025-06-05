@@ -17,7 +17,7 @@ Fault Detection and Localization Module for STREAM Pipeline.
 - Alerts:
   - severities?
   - DB
-- adopt pub/sub edge frequencies over topic frequency from latest IPC
+- reimplement ODDAD, with 3-sigma-rule fallback
 
 ## low priority
 - rethink some of the move semantics
@@ -27,6 +27,9 @@ Fault Detection and Localization Module for STREAM Pipeline.
 
 ## ideas
 - "new (adjacent) nodes" list
+- actual attribute names:
+  - name mapping in IPC for default attributes
+  - attribute name mapping in config for attributes which are manually piped into IPC
 
 # Custom Full Graph View Query
 The blind spot check uses a custom query to retrieve the whole graph, which looks as follows:

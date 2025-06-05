@@ -7,6 +7,7 @@ namespace json = nlohmann;
 #include <chrono>
 namespace cr = std::chrono;
 #include <stdexcept>
+#include <string>
 
 
 #define CONFIG_PROJECT_ID                       "project-id"
@@ -22,4 +23,5 @@ namespace cr = std::chrono;
 #define MAKE_RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}
 
 
-using timestamp_t = cr::system_clock::time_point;
+using Timestamp = cr::system_clock::time_point;
+using PrimaryKey = std::string;

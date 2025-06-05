@@ -33,8 +33,8 @@ private:
     requestId_t requestId;
     size_t useCounter;
   };
-  using Nodes = std::map<Member::Primary, MemberData<Node>>;
-  using Topics = std::map<Member::Primary, MemberData<Topic>>;
+  using Nodes = std::map<PrimaryKey, MemberData<Node>>;
+  using Topics = std::map<PrimaryKey, MemberData<Topic>>;
 
 public:
   DataStore(
@@ -42,22 +42,22 @@ public:
   );
 
   const Member::Ptr getNode(
-    const Member::Primary &primary
+    const PrimaryKey &primary
   );
   const Member::Ptr getNodeByName(
     const std::string &name
   );
   void removeNode(
-    const Member::Primary &primary
+    const PrimaryKey &primary
   );
   const Member::Ptr getTopic(
-    const Member::Primary &primary
+    const PrimaryKey &primary
   );
   const Member::Ptr getTopicByName(
     const std::string &name
   );
   void removeTopic(
-    const Member::Primary &primary
+    const PrimaryKey &primary
   );
 
   Graph getFullGraphView() const;
@@ -69,12 +69,12 @@ public:
 
 private:
   Node *requestNode(
-    Member::Primary primary,
+    PrimaryKey primary,
     bool updates
   );
 
   Topic *requestTopic(
-    Member::Primary primary,
+    PrimaryKey primary,
     bool updates
   );
 

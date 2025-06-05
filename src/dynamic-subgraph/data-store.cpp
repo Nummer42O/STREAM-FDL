@@ -14,7 +14,7 @@ DataStore::DataStore(const json::json &config):
   mIpcClient(IpcClient(config.at(CONFIG_PROJECT_ID)))
 {}
 
-Node *DataStore::requestNode(Member::Primary primary, bool updates)
+Node *DataStore::requestNode(PrimaryKey primary, bool updates)
 {
   requestId_t requestId;
   NodeRequest nodeRequest{
@@ -46,13 +46,13 @@ Node *DataStore::requestNode(Member::Primary primary, bool updates)
   mIpcClient.sendSingleAttributesRequest(req, requestId);
 
   it->second.instance.addAttributeSource(
-    AttributeName::CPU_UTILIZATION, mIpcClient.receiveSingleAttributesResponse().value()
+    std::to_string(AttributeName::CPU_UTILIZATION), mIpcClient.receiveSingleAttributesResponse().value()
   );
 
   return &(it->second.instance);
 }
 
-Topic *DataStore::requestTopic(Member::Primary primary, bool updates)
+Topic *DataStore::requestTopic(PrimaryKey primary, bool updates)
 {
   requestId_t requestId;
   TopicRequest topicRequest{
@@ -75,22 +75,25 @@ Topic *DataStore::requestTopic(Member::Primary primary, bool updates)
   //! NOTE: However, IPC doesn't provide a pipeline to get those yet, so we set the
   //!       ones we know of manually.
   const Topic &topic = it->second.instance;
-  SingleAttributesRequest req{
-    .attribute = AttributeName::PUBLISHINGRATES,
-    .direction = Direction::EDGEINCOMING,
-    .continuous = true
-  };
-  util::parseString(req.primaryKey, topic.mPrimaryKey);
-  mIpcClient.sendSingleAttributesRequest(req, requestId);
+  for (const Topic::Edges::value_type &edge: topic.mPublishers)
+  {
+    SingleAttributesRequest req{
+      .attribute = AttributeName::PUBLISHINGRATES,
+      .direction = Direction::NONE,
+      .continuous = true
+    };
+    util::parseString(req.primaryKey, edge.self);
+    mIpcClient.sendSingleAttributesRequest(req, requestId);
 
-  it->second.instance.addAttributeSource(
-    AttributeName::PUBLISHINGRATES, mIpcClient.receiveSingleAttributesResponse().value()
-  );
+    it->second.instance.addAttributeSource(
+      std::to_string(AttributeName::PUBLISHINGRATES) + ": " + edge.self, mIpcClient.receiveSingleAttributesResponse().value()
+    );
+  }
 
   return &(it->second.instance);
 }
 
-const Member::Ptr DataStore::getNode(const Member::Primary &primary)
+const Member::Ptr DataStore::getNode(const PrimaryKey &primary)
 {
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end())
@@ -121,14 +124,14 @@ const Member::Ptr DataStore::getNodeByName(const std::string &name)
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
 
-  Member::Primary primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  PrimaryKey primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
   if (primaryKey.empty())
     return nullptr;
   else
     return requestNode(primaryKey, true);
 }
 
-void DataStore::removeNode(const Member::Primary &primary)
+void DataStore::removeNode(const PrimaryKey &primary)
 {
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
@@ -140,7 +143,7 @@ void DataStore::removeNode(const Member::Primary &primary)
   }
 }
 
-const Member::Ptr DataStore::getTopic(const Member::Primary &primary)
+const Member::Ptr DataStore::getTopic(const PrimaryKey &primary)
 {
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end())
@@ -171,14 +174,14 @@ const Member::Ptr DataStore::getTopicByName(const std::string &name)
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
 
-  Member::Primary primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  PrimaryKey primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
   if (primaryKey.empty())
     return nullptr;
   else
     return requestTopic(primaryKey, true);
 }
 
-void DataStore::removeTopic(const Member::Primary &primary)
+void DataStore::removeTopic(const PrimaryKey &primary)
 {
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)

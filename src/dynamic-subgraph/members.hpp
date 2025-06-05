@@ -26,18 +26,16 @@ friend class DataStore;
 friend class Graph;
 
 public:
-  using AttributeNameType = int;
-  using AttributeMapping = std::map<AttributeNameType, double>;
+  using AttributeDescriptor = std::string;
+  using AttributeMapping = std::map<AttributeDescriptor, double>;
   using SharedMemory = sharedMem::SHMChannel<sharedMem::Response>;
 
-  using Primary = std::string;
-  //! TODO: only temporary fix for now as vector elements can not be const
-  using Ptr = Member *; //const;
+  using Ptr = Member *;
 
 protected:
   struct Attribute
   {
-    AttributeNameType name;
+    AttributeDescriptor name;
     SharedMemory sharedMemory;
     requestId_t requestId;
     double lastValue;
@@ -45,31 +43,29 @@ protected:
   using Attributes = std::vector<Attribute>;
 
 protected:
-  inline Member(
+  Member(
     bool isTopic,
-    Primary primaryKey
+    PrimaryKey primaryKey
   ):
-    mIsTopic(isTopic),
+    cmIsTopic(isTopic),
     mPrimaryKey(primaryKey)
   {}
 
 public:
   AttributeMapping getAttributes();
   void addAttributeSource(
-    AttributeNameType attributeName,
+    const AttributeDescriptor &attributeName,
     const SingleAttributesResponse &response
   );
 
 public:
-  const bool mIsTopic;
+  const bool cmIsTopic;
 
-  Primary     mPrimaryKey;
+  PrimaryKey     mPrimaryKey;
   Attributes  mAttributes;
 };
-// using MemberPrimary = primaryKey_t;
-// using MemberPtr = Member *const;
 using Members = std::vector<Member::Ptr>;
-using MemberIds = std::vector<Member::Primary>;
+using MemberIds = std::vector<PrimaryKey>;
 
 
 class Node: public Member
@@ -78,7 +74,7 @@ friend class DataStore;
 friend class Graph;
 
 public:
-  using ServiceMapping = std::map<std::string, Member::Primary>;
+  using ServiceMapping = std::map<std::string, PrimaryKey>;
   using Clients = MemberIds;
   using ClientMapping = std::map<std::string, Clients>;
 
@@ -114,7 +110,7 @@ public:
   std::string     mName;
   std::string     mPkgName;
   bool            mAlive;
-  timestamp_t     mAliveChangeTime;
+  Timestamp     mAliveChangeTime;
   uint32_t        mBootCount;
   pid_t           mProcessId;
 
@@ -134,12 +130,19 @@ friend class DataStore;
 friend class Graph;
 
 public:
+  struct CommunicationEdge
+  {
+    PrimaryKey node, self;
+  };
+  using Edges = std::vector<CommunicationEdge>;
+
+public:
   void update(
     const TopicPublishersUpdate &update
-  ) { mPublishers.push_back(update.publisher); }
+  ) { mPublishers.push_back({update.publisher, update.edge}); }
   void update(
     const TopicSubscribersUpdate &update
-  ) { mSubscribers.push_back(update.subscriber); }
+  ) { mSubscribers.push_back({update.subscriber, update.edge}); }
 
 private:
   Topic(
@@ -151,6 +154,6 @@ private:
   std::string     mType;
 
 private:
-  MemberIds       mPublishers,
+  Edges           mPublishers,
                   mSubscribers;
 };

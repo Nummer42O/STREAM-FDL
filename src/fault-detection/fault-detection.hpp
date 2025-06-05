@@ -19,8 +19,8 @@ namespace cr = std::chrono;
 struct Alert
 {
   Member::Ptr member;
-  std::vector<Member::AttributeNameType> affectedAttributes;
-  timestamp_t timestamp;
+  std::vector<Member::AttributeDescriptor> affectedAttributes;
+  Timestamp timestamp;
   enum Severity {
     SEVERITY_NORMAL //! TODO
   } severity;
@@ -35,7 +35,7 @@ public:
   using Alerts = std::vector<Alert>;
 
 private:
-  using AttributeWindow = std::map<Member::AttributeNameType, CircularBuffer>;
+  using AttributeWindow = std::map<Member::AttributeDescriptor, CircularBuffer>;
   using MemberWindow = std::map<Member::Ptr, AttributeWindow>;
 
 public:

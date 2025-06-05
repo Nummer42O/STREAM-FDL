@@ -7,7 +7,6 @@ find_package(Eigen3 3.3 REQUIRED CONFIG)
 target_sources(main
   PRIVATE
     main.cpp
-    common.cpp
 )
 target_link_libraries(main
   PRIVATE

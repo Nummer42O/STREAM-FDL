@@ -56,7 +56,7 @@ void DynamicSubgraphBuilder::blindSpotCheck()
   MemberIds potentialBlindSpots = ::getBlindspots(fullGraph);
   Members watchlistMembers = mWatchlist.getMembers();
 
-  for (const Member::Primary &member: potentialBlindSpots)
+  for (const PrimaryKey &member: potentialBlindSpots)
   {
     Members::const_iterator it = std::find_if(
       watchlistMembers.begin(), watchlistMembers.end(),
@@ -82,7 +82,7 @@ void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
     auto vertex = mSAG.add(alert.member);
     if (vertex)
     {
-      for (const Member::Primary &primary: vertex->incoming)
+      for (const PrimaryKey &primary: vertex->incoming)
         mWatchlist.addMember(
           vertex->type == Graph::Vertex::TYPE_NODE ?
           mpDataStore->getNode(primary) :

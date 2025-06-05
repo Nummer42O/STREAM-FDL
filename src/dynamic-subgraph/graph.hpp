@@ -20,16 +20,16 @@ public:
   };
 
 private:
-  using Vertices = std::map<Member::Primary, Vertex>;
+  using Vertices = std::map<PrimaryKey, Vertex>;
 
 public:
   const Vertex *addNode(
-    Member::Primary primary,
+    PrimaryKey primary,
     MemberIds incomingEdges = {},
     MemberIds outgoingEdges = {}
   ) { return add(primary, Vertex{.type = Vertex::TYPE_NODE, .incoming = std::move(incomingEdges), .outgoing = std::move(outgoingEdges)}); }
   const Vertex *addTopic(
-    Member::Primary primary,
+    PrimaryKey primary,
     MemberIds incomingEdges = {},
     MemberIds outgoingEdges = {}
   ) { return add(primary, Vertex{.type = Vertex::TYPE_TOPIC, .incoming = std::move(incomingEdges), .outgoing = std::move(outgoingEdges)}); }
@@ -39,7 +39,7 @@ public:
   );
 
   const Vertex *get(
-    const Member::Primary &primary
+    const PrimaryKey &primary
   ) const;
 
   void reset() { mVertices.clear(); }
@@ -51,7 +51,7 @@ public:
 
 private:
   const Vertex *add(
-    Member::Primary primary,
+    PrimaryKey primary,
     Vertex vertex
   );
 
