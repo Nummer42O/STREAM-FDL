@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+    {
+      "type": "cmake",
+      "label": "Build",
+      "detail": "CMake build task",
+      "command": "build",
+      "targets": [
+        "all"
+      ],
+      "group": {
+        "isDefault": true,
+        "kind": "build"
+      },
+      "presentation": {
+        "echo": false,
+        "reveal": "silent",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -24,12 +24,12 @@ private:
 
 public:
   const Vertex *addNode(
-    PrimaryKey primary,
+    const PrimaryKey &primary,
     MemberIds incomingEdges = {},
     MemberIds outgoingEdges = {}
   ) { return add(primary, Vertex{.type = Vertex::TYPE_NODE, .incoming = std::move(incomingEdges), .outgoing = std::move(outgoingEdges)}); }
   const Vertex *addTopic(
-    PrimaryKey primary,
+    const PrimaryKey &primary,
     MemberIds incomingEdges = {},
     MemberIds outgoingEdges = {}
   ) { return add(primary, Vertex{.type = Vertex::TYPE_TOPIC, .incoming = std::move(incomingEdges), .outgoing = std::move(outgoingEdges)}); }
@@ -51,7 +51,7 @@ public:
 
 private:
   const Vertex *add(
-    PrimaryKey primary,
+    const PrimaryKey &primary,
     Vertex vertex
   );
 

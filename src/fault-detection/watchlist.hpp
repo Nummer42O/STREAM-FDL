@@ -36,7 +36,7 @@ public:
 
 private:
   void tryInitialise();
-  void removeMember(const InternalMembers::value_type &element);
+  InternalMembers::iterator removeMember(InternalMembers::iterator elementIt);
 
 private:
   std::vector<std::string> mInitialMemberNames;

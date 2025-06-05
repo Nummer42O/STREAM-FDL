@@ -1,5 +1,7 @@
 #include "dynamic-subgraph/dynamic-subgraph.hpp"
 
+#include "common.hpp"
+
 #include <thread>
 
 //! TODO: actual values
@@ -17,10 +19,14 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
   mBlindSpotCheckCounter(0ul),
   cmBlindspotInterval(config.at(CONFIG_BLINDSPOT_INTERVAL).get<size_t>()),
   cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>())
-{}
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(dataStorePtr));
+}
 
 void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
+
   std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running));
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running));
 
@@ -52,6 +58,8 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
 void DynamicSubgraphBuilder::blindSpotCheck()
 {
+  LOG_TRACE(LOG_THIS);
+
   Graph fullGraph = mpDataStore->getFullGraphView();
   MemberIds potentialBlindSpots = ::getBlindspots(fullGraph);
   Members watchlistMembers = mWatchlist.getMembers();
@@ -77,6 +85,8 @@ void DynamicSubgraphBuilder::blindSpotCheck()
 
 void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
 {
+  LOG_TRACE(LOG_THIS);
+
   for (const Alert &alert: newAlerts)
   {
     auto vertex = mSAG.add(alert.member);
@@ -94,11 +104,15 @@ void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
 
 bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
 {
-  size_t nrAlerts = newAlerts.size();
-  mLastNrAlerts.push(nrAlerts);
+  LOG_TRACE(LOG_THIS);
+
+  size_t nrNewAlerts = newAlerts.size();
+  mLastNrAlerts.push(nrNewAlerts);
 
   // get average ammount of new alerts
   double meanNewAlerts = mLastNrAlerts.getMean();
+
+  LOG_DEBUG(LOG_VAR(nrNewAlerts) LOG_VAR(meanNewAlerts) LOG_VAR(mSomethingIsGoingOn));
   // if we currently are not investigating any failure…
   if (!mSomethingIsGoingOn)
   {

@@ -11,6 +11,8 @@ namespace cr = std::chrono;
 
 Member::AttributeMapping Member::getAttributes()
 {
+  LOG_TRACE(LOG_THIS);
+
   AttributeMapping output;
   for (Attribute &attribute: mAttributes)
   {
@@ -27,6 +29,8 @@ Member::AttributeMapping Member::getAttributes()
 
 void Member::addAttributeSource(const AttributeDescriptor &attributeName, const SingleAttributesResponse &response)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(attributeName) "requestId: " << response.requestID << "memAddress: " << response.memAddress);
+
   SharedMemory shm(util::parseString(response.memAddress));
   sharedMem::Response shmResponse = MAKE_RESPONSE;
   shm.receive(shmResponse);
@@ -42,6 +46,8 @@ void Member::addAttributeSource(const AttributeDescriptor &attributeName, const 
 
 void Node::update(const NodeIsServerForUpdate &update)
 {
+  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.clientNodeId);
+
   std::string serviceName(util::parseString(update.srvName));
   ClientMapping::iterator it = mClients.find(serviceName);
   if (it == mClients.end())
@@ -52,6 +58,8 @@ void Node::update(const NodeIsServerForUpdate &update)
 
 void Node::update(const NodeIsActionServerForUpdate &update)
 {
+  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.actionclientNodeId);
+
   std::string serviceName(util::parseString(update.srvName));
   ClientMapping::iterator it = mClients.find(serviceName);
   if (it == mClients.end())
@@ -62,6 +70,8 @@ void Node::update(const NodeIsActionServerForUpdate &update)
 
 void Node::update(const NodeStateUpdate &update)
 {
+  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "state: " << update.state << "change time: " << update.stateChangeTime);
+
   bool isAliveNow = (update.state == sharedMem::State::ACTIVE);
   if (isAliveNow != mAlive)
   {
@@ -78,10 +88,16 @@ Node::Node(const NodeResponse &response):
   mAliveChangeTime(cr::system_clock::from_time_t(response.stateChangeTime)),
   mBootCount(response.bootCount),
   mProcessId(response.pid)
-{}
+{
+  //! TODO: reponse logging
+  LOG_TRACE(LOG_THIS);
+}
 
 Topic::Topic(const TopicResponse &response):
   Member(true, response.primaryKey),
   mName(util::parseString(response.name)),
   mType(util::parseString(response.type))
-{}
+{
+  //! TODO: reponse logging
+  LOG_TRACE(LOG_THIS);
+}

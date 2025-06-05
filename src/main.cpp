@@ -1,5 +1,6 @@
 #include "dynamic-subgraph/dynamic-subgraph.hpp"
 #include "dynamic-subgraph/data-store.hpp"
+#include "common.hpp"
 
 #include "nlohmann/json.hpp"
 namespace json = nlohmann;
@@ -17,7 +18,7 @@ namespace fs = std::filesystem;
 static std::atomic<bool> gIsRunning;
 void sigintHandler(int)
 {
-  std::cout << "\rCalled SIGINT handler, aborting.\n";
+  LOG_INFO("Called SIGINT handler, aborting.");
   gIsRunning.store(false);
 }
 
@@ -35,28 +36,31 @@ int main(int argc, char *argv[])
   if (!fs::is_regular_file(configFilePath) ||
       configFilePath.extension() != ".json")
   {
-    std::cerr << "Invalid configuration file " << configFilePath << ", must be regular json file.\n";
+    LOG_FATAL("Invalid configuration file " << configFilePath << ", must be regular json file.\n")
     return 2;
   }
 
   std::ifstream configFile(configFilePath, std::ios_base::in);
   if (!configFile.is_open())
   {
-    std::cerr << "Can not open file" << configFilePath << ": " << std::strerror(errno) << '\n';
+    LOG_FATAL("Can not open file" << configFilePath << ": " << std::strerror(errno) << '\n')
     return 3;
   }
 
+  LOG_DEBUG("Opened config file: " << configFilePath);
   json::json config = json::json::parse(configFile);
   configFile.close();
 
   {
     DataStore dataStore(config);
     DynamicSubgraphBuilder dsg(config, &dataStore);
+    LOG_TRACE("Initialised DataStore and DSG.");
 
     sighandler_t defaultHandler = signal(SIGINT, sigintHandler);
     gIsRunning.store(true);
     dsg.run(gIsRunning);
     signal(SIGINT, defaultHandler);
+    LOG_TRACE("Main loop exited.")
   }
 
   return 0;

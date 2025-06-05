@@ -1,5 +1,7 @@
 #include "fault-detection/circular-buffer.hpp"
 
+#include "common.hpp"
+
 #include <cassert>
 #include <numeric>
 #include <cmath>
@@ -10,6 +12,8 @@ CircularBuffer::CircularBuffer(size_t maxSize):
   mMaxSize(maxSize)
 {
   assert(mMaxSize >= 2);
+  LOG_TRACE(LOG_THIS LOG_VAR(maxSize));
+
   mCurrent = mBuffer.begin();
 }
 
@@ -17,10 +21,14 @@ CircularBuffer::CircularBuffer(const CircularBuffer &other):
   mMaxSize(other.mMaxSize),
   mBuffer(other.mBuffer),
   mCurrent(mBuffer.begin() + (other.mCurrent - other.mBuffer.begin()))
-{}
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+}
 
 CircularBuffer &CircularBuffer::operator=(const CircularBuffer &other)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+
   mMaxSize = other.mMaxSize;
   mBuffer = other.mBuffer;
   mCurrent = mBuffer.begin() + (other.mCurrent - other.mBuffer.begin());
@@ -33,10 +41,14 @@ CircularBuffer::CircularBuffer(CircularBuffer &&other):
   mBuffer(std::move(other.mBuffer)),
   //! NOTE: that should be fine from my testing
   mCurrent(std::move(other.mCurrent))
-{}
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+}
 
 CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+
   mMaxSize = other.mMaxSize;
   mBuffer = std::move(other.mBuffer);
   mCurrent = std::move(other.mCurrent);
@@ -46,6 +58,8 @@ CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
 
 CircularBuffer::iterator CircularBuffer::push(value_type value)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(value));
+
   iterator it = mBuffer.insert(mCurrent++, value);
   if (mCurrent == mBuffer.end() &&
       mBuffer.size() == mMaxSize)
@@ -56,6 +70,8 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 
 CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(offset));
+
   const_iterator beginIt = mBuffer.begin();
   ptrdiff_t currentOffset = mCurrent - beginIt;
 
@@ -69,6 +85,8 @@ CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
 
 double CircularBuffer::getMean() const
 {
+  LOG_TRACE(LOG_THIS);
+
   const size_t bufferSize = mBuffer.size();
   assert(bufferSize >= 1);
 
@@ -85,6 +103,8 @@ double CircularBuffer::getMean() const
 
 double CircularBuffer::getStdDev(double mean) const
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(mean));
+
   const size_t bufferSize = mBuffer.size();
   assert(bufferSize >= 1);
 

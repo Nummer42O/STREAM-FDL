@@ -1,4 +1,5 @@
 #include "fault-detection/fault-detection.hpp"
+
 #include "dynamic-subgraph/members.hpp"
 #include "common.hpp"
 
@@ -8,10 +9,6 @@ namespace cr = std::chrono;
 using namespace std::chrono_literals;
 #include <thread>
 
-//! TODO: actual value
-//#define CIRCULAR_BUFFER_SIZE 10
-//#define WAIT_TIME 100ms
-
 
 //! NOTE: reenable parameter when moving from macros to config
 FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, DataStore::Ptr dataStorePtr):
@@ -19,10 +16,14 @@ FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, D
   mpDataStore(dataStorePtr),
   cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
   cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
-{}
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(watchlist) LOG_VAR(dataStorePtr));
+}
 
 void FaultDetection::run(const std::atomic<bool> &running)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
+
   Timestamp start, stop;
   while (running.load())
   {
@@ -69,6 +70,8 @@ void FaultDetection::run(const std::atomic<bool> &running)
 
 FaultDetection::Alerts FaultDetection::getEmittedAlerts()
 {
+  LOG_TRACE(LOG_THIS);
+
   std::scoped_lock<std::mutex> scopeLock(mAlertMutex);
 
   Alerts output = mAlerts;
@@ -79,6 +82,8 @@ FaultDetection::Alerts FaultDetection::getEmittedAlerts()
 
 FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::AttributeMapping &attributeMapping) const
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(&attributeMapping));
+
   AttributeWindow attrWindow;
   for (const auto &[descriptor, attributes]: attributeMapping)
   {
@@ -94,12 +99,16 @@ FaultDetection::AttributeWindow FaultDetection::createAttrWindow(const Member::A
 
 void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::AttributeMapping &attributeMapping)
 {
+  LOG_TRACE(LOG_VAR(&window) LOG_VAR(&attributeMapping));
+
   for (const auto &[descriptor, attributes]: attributeMapping)
     window.at(descriptor).push(attributes);
 }
 
 bool FaultDetection::detectFaults(Member::Ptr member, const AttributeWindow &window, Alert &oAlert)
 {
+  LOG_TRACE(LOG_VAR(member) LOG_VAR(&window) LOG_VAR(&oAlert));
+
   oAlert.timestamp = cr::system_clock::now();
   oAlert.severity = Alert::SEVERITY_NORMAL;
   if (!member->cmIsTopic && !static_cast<Node *>(member)->mAlive)

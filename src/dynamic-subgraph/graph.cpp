@@ -1,14 +1,19 @@
 #include "dynamic-subgraph/graph.hpp"
 
+#include "common.hpp"
+
 #include <cassert>
 
 
 const Graph::Vertex *Graph::add(Member::Ptr member)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(member));
+
   Vertices::iterator it = mVertices.find(member->mPrimaryKey);
   if (it != mVertices.end())
     return nullptr;
 
+  LOG_DEBUG(LOG_THIS LOG_VAR(member->cmIsTopic))
   Vertex vertex;
   if (member->cmIsTopic)
   {
@@ -63,11 +68,14 @@ const Graph::Vertex *Graph::add(Member::Ptr member)
   }
 
   auto [emplacedIt, isEmplaced] = mVertices.emplace(member->mPrimaryKey, std::move(vertex));
+  assert(isEmplaced);
   return &(emplacedIt->second);
 }
 
 const Graph::Vertex *Graph::get(const PrimaryKey &primary) const
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
   Vertices::const_iterator it = mVertices.find(primary);
   if (it != mVertices.end())
     return &(it->second);
@@ -75,8 +83,10 @@ const Graph::Vertex *Graph::get(const PrimaryKey &primary) const
   return nullptr;
 }
 
-const Graph::Vertex *Graph::add(PrimaryKey primary, Vertex vertex)
+const Graph::Vertex *Graph::add(const PrimaryKey &primary, Vertex vertex)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(&vertex));
+
   Vertices::iterator it = mVertices.find(primary);
   if (it != mVertices.end())
     return nullptr;
@@ -92,6 +102,8 @@ static void getBlindspotsInternal(
   MemberIds &oBlindSpots
 )
 {
+  LOG_TRACE(LOG_VAR(&graph) LOG_VAR(currentPath) LOG_VAR(ioAllVertices) LOG_VAR(oBlindSpots));
+
   // get outgoing edges (and their count) for currently observed vertex
   const PrimaryKey &currentVertex = currentPath.back();
   const MemberIds &outgoingEdges = graph.get(currentVertex)->outgoing;
@@ -123,6 +135,8 @@ static void getBlindspotsInternal(
 
 MemberIds getBlindspots(const Graph &graph)
 {
+  LOG_TRACE(LOG_VAR(&graph));
+
   // get a vector of all vertices in the graph
   MemberIds allVertices;
   std::transform(

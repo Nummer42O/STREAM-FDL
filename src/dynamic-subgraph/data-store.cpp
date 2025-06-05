@@ -1,5 +1,6 @@
 #include "dynamic-subgraph/data-store.hpp"
 
+#include "common.hpp"
 #include "ipc/datastructs/information-datastructs.hpp"
 #include "ipc/util.hpp"
 
@@ -12,10 +13,14 @@ namespace json = nlohmann;
 
 DataStore::DataStore(const json::json &config):
   mIpcClient(IpcClient(config.at(CONFIG_PROJECT_ID)))
-{}
-
-Node *DataStore::requestNode(PrimaryKey primary, bool updates)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(config));
+}
+
+Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
+
   requestId_t requestId;
   NodeRequest nodeRequest{
     .updates = updates
@@ -52,8 +57,10 @@ Node *DataStore::requestNode(PrimaryKey primary, bool updates)
   return &(it->second.instance);
 }
 
-Topic *DataStore::requestTopic(PrimaryKey primary, bool updates)
+Topic *DataStore::requestTopic(const PrimaryKey &primary, bool updates)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
+
   requestId_t requestId;
   TopicRequest topicRequest{
     .updates = updates
@@ -95,6 +102,8 @@ Topic *DataStore::requestTopic(PrimaryKey primary, bool updates)
 
 const Member::Ptr DataStore::getNode(const PrimaryKey &primary)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end())
   {
@@ -107,6 +116,8 @@ const Member::Ptr DataStore::getNode(const PrimaryKey &primary)
 
 const Member::Ptr DataStore::getNodeByName(const std::string &name)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(name));
+
   Nodes::iterator nodeIt = std::find_if(
     mNodes.begin(), mNodes.end(),
     [name](const Nodes::value_type &element) -> bool
@@ -133,6 +144,8 @@ const Member::Ptr DataStore::getNodeByName(const std::string &name)
 
 void DataStore::removeNode(const PrimaryKey &primary)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
   {
@@ -145,6 +158,8 @@ void DataStore::removeNode(const PrimaryKey &primary)
 
 const Member::Ptr DataStore::getTopic(const PrimaryKey &primary)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end())
   {
@@ -157,6 +172,8 @@ const Member::Ptr DataStore::getTopic(const PrimaryKey &primary)
 
 const Member::Ptr DataStore::getTopicByName(const std::string &name)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(name));
+
   Topics::iterator topicIt = std::find_if(
     mTopics.begin(), mTopics.end(),
     [name](const Topics::value_type &element) -> bool
@@ -183,6 +200,8 @@ const Member::Ptr DataStore::getTopicByName(const std::string &name)
 
 void DataStore::removeTopic(const PrimaryKey &primary)
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)
   {
@@ -195,6 +214,8 @@ void DataStore::removeTopic(const PrimaryKey &primary)
 
 Graph DataStore::getFullGraphView() const
 {
+  LOG_TRACE(LOG_THIS);
+
   // send a request for the whole graph structure
   CustomMemberRequest req{
     .query = {

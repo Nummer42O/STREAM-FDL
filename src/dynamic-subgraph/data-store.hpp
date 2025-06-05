@@ -69,12 +69,12 @@ public:
 
 private:
   Node *requestNode(
-    PrimaryKey primary,
+    const PrimaryKey &primary,
     bool updates
   );
 
   Topic *requestTopic(
-    PrimaryKey primary,
+    const PrimaryKey &primary,
     bool updates
   );
 
