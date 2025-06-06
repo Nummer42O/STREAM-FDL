@@ -52,36 +52,36 @@ namespace cr = std::chrono;
 #define LOG_THIS "(this = " << this << ") "
 #define LOG_VAR(var) #var ": " << var << " "
 
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_TRACE
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
 #define LOG_TRACE(msg)  _LOG("[TRACE]", msg)
 #else
 #define LOG_TRACE(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_TRACE
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_DEBUG
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
 #define LOG_DEBUG(msg)  _LOG("[DEBUG]", msg)
 #else
 #define LOG_DEBUG(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_DEBUG
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_INFO
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
 #define LOG_INFO(msg)   _LOG("[INFO] ", msg)
 #else
 #define LOG_INFO(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_INFO
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_WARN
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
 #define LOG_WARN(msg)   _LOG("[WARN] ", msg)
 #else
 #define LOG_WARN(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_WARN
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_ERROR
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
 #define LOG_ERROR(msg)  _LOG("[ERROR]", msg)
 #else
 #define LOG_ERROR(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_ERROR
-#if FDL_LOG_LEVEL >= _LOG_LEVEL_FATAL
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
+#if FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
 #define LOG_FATAL(msg)  _LOG("[FATAL]", msg)
 #else
 #define LOG_FATAL(msg)
-#endif // FDL_LOG_LEVEL >= _LOG_LEVEL_FATAL
+#endif // FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
 
 
 using Timestamp = cr::system_clock::time_point;
