@@ -4,6 +4,7 @@
 namespace cr = std::chrono;
 #include <ctime>
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <iomanip>
 #include <source_location>
@@ -43,10 +44,12 @@ namespace cr = std::chrono;
   { \
     const std::source_location source = std::source_location::current(); \
     _LOG_GET_TIME \
-    std::clog << std::boolalpha \
+    std::stringstream logMsg; \
+    logMsg << std::boolalpha \
       << _LOG_TIMESTAMP severity " " \
       << source.function_name() << " (" << source.file_name() << ":" << source.line() << "): " \
-      << msg << '\n'; \
+      << msg << "\n"; \
+    std::clog << logMsg.str(); \
   }
 
 #define LOG_THIS "(this = " << this << ") "
