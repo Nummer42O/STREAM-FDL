@@ -11,6 +11,10 @@ set(_install_include_dir  "${CMAKE_INSTALL_FULL_INCLUDEDIR}/")
 set(_build_plugin_dir     "${CMAKE_BINARY_DIR}/plugins")
 set(_install_plugin_dir   "${CMAKE_INSTALL_FULL_LIBDIR}/plugins")
 
+option(FDL_LOG_MINIMAL "Minimses what meta information is included in the logging output. Implicitly disabled FDL_LOG_TIMESTAMP." OFF)
+if(${FDL_LOG_MINIMAL})
+  set(_log_minimal_definition "FDL_LOG_MINIMAL")
+endif()
 option(FDL_LOG_TIMESTAMP "Wether to prepend the current timestamp on the log message. (default: ON)" ON)
 if(${FDL_LOG_TIMESTAMP})
   set(_log_timestamp_definition "FDL_LOG_TIMESTAMP")
@@ -35,6 +39,7 @@ target_compile_definitions(main
     PLUGIN_DIRECTORY="$<BUILD_INTERFACE:${_build_plugin_dir}>$<INSTALL_INTERFACE:${_install_plugin_dir}>"
     ${_log_level_definition}
     ${_log_timestamp_definition}
+    ${_log_minimal_definition}
 )
 
 add_subdirectory(src)

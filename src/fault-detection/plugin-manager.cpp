@@ -87,7 +87,7 @@ const std::vector<std::string> PluginManager::getLoaded() const
   loadedPluginNames.reserve(mLoadedPlugins.size());
   std::transform(
     mLoadedPlugins.begin(), mLoadedPlugins.end(),
-    loadedPluginNames.begin(),
+    std::back_inserter(loadedPluginNames),
     [](const Plugins::value_type &plugin) -> std::string
     {
       return plugin.first;

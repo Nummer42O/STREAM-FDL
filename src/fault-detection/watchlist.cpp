@@ -20,7 +20,7 @@ void Watchlist::addMember(Member::Ptr member, WatchlistMemberType type)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member) "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
 
-  std::scoped_lock<std::mutex> scopeLock(mMembersMutex);
+  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
 
   InternalMembers::iterator it = mMembers.find(member);
   if (it == mMembers.end())
@@ -33,7 +33,7 @@ void Watchlist::removeMember(Member::Ptr member)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member));
 
-  std::scoped_lock<std::mutex> scopeLock(mMembersMutex);
+  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
 
   InternalMembers::iterator it = mMembers.find(member);
   if (it == mMembers.end())
@@ -46,14 +46,14 @@ Members Watchlist::getMembers()
 {
   LOG_TRACE(LOG_THIS);
 
-  std::scoped_lock<std::mutex> scopeLock(mMembersMutex);
+  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
 
   tryInitialise();
 
   Members output(mMembers.size());
   std::transform(
     mMembers.begin(), mMembers.end(),
-    output.begin(),
+    std::back_inserter(output),
     [](const InternalMembers::value_type &element) -> Members::value_type
     {
       return element.first;
@@ -80,7 +80,7 @@ void Watchlist::reset()
 {
   LOG_TRACE(LOG_THIS);
 
-  std::scoped_lock<std::mutex> scopeLock(mMembersMutex);
+  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
 
   for (InternalMembers::iterator it = mMembers.begin(); it != mMembers.end();)
   {
@@ -101,7 +101,7 @@ void Watchlist::notifyUsed(Member::Ptr member)
     return;
 
   {
-    std::scoped_lock<std::mutex> scopedLock(mMembersMutex);
+    const std::lock_guard<std::mutex> scopedLock(mMembersMutex);
 
     removeMember(memberIt);
   }

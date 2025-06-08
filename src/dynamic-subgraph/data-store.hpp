@@ -9,6 +9,7 @@
 #include "ipc/ipc-client.hpp"
 
 #include "nlohmann/json.hpp"
+#include "nlohmann/detail/exceptions.hpp"
 namespace json = nlohmann;
 
 #include <string>
@@ -76,6 +77,10 @@ private:
   Topic *requestTopic(
     const PrimaryKey &primary,
     bool updates
+  );
+
+  static IpcClient tryMakeIpcClient(
+    const json::json &config
   );
 
 private:

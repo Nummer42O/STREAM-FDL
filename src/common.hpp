@@ -8,10 +8,15 @@ namespace cr = std::chrono;
 #include <iostream>
 #include <iomanip>
 #include <source_location>
-#include <type_traits>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 
-#define CONFIG_PROJECT_ID                       "project-id"
+#define CONFIG_IPC                              "ipc"
+#define   CONFIG_PROJECT_ID                     "project-id"
+#define   CONFIG_RETRY_CONNECTION               "retry-connection"
+#define   CONFIG_RETRY_ATTEMPTS                 "retry-attempts"
+#define   CONFIG_RETRY_TIMEOUT                  "retry-timeout-ms"
 #define CONFIG_ALERT_RATE                       "alert-rate"
 #define   CONFIG_NR_NORMALISATION_VALUES        "nr-normalisation-values"
 #define   CONFIG_ABORTION_CRITERIA_THRESHOLD    "abortion-criteria-threshold"
@@ -34,54 +39,73 @@ namespace cr = std::chrono;
 
 #ifdef FDL_LOG_TIMESTAMP
 #define _LOG_GET_TIME std::time_t timestamp = cr::system_clock::to_time_t(cr::system_clock::now());
-#define _LOG_TIMESTAMP '[' << std::put_time(std::localtime(&timestamp), "%x %X") << "]"
+#define _LOG_TIMESTAMP "[" << std::put_time(std::localtime(&timestamp), "%x %X") << "]"
 #else
 #define _LOG_GET_TIME
 #define _LOG_TIMESTAMP
 #endif // defined(FDL_LOG_TIMESTAMP)
 
-#define _LOG(severity, msg) \
+#ifdef FDL_LOG_MINIMAL
+#define _LOG(severity, color, msg) \
+  { \
+    const std::source_location source = std::source_location::current(); \
+    fs::path sourceFile = source.file_name(), shortSourceFile = sourceFile.filename(), parent; \
+    do { \
+      sourceFile = sourceFile.parent_path(); \
+      parent = sourceFile.filename(); \
+      shortSourceFile = parent / shortSourceFile; \
+    } while (!parent.empty() && parent != "src"); \
+    std::stringstream logMsg; \
+    logMsg << std::boolalpha \
+      << color severity "(" << shortSourceFile.string() << ':' << source.line() << ") " << source.function_name() << ":\033[0m " \
+      << msg << '\n'; \
+    std::clog << logMsg.str(); \
+  }
+#else
+#define _LOG(severity, color, msg) \
   { \
     const std::source_location source = std::source_location::current(); \
     _LOG_GET_TIME \
     std::stringstream logMsg; \
     logMsg << std::boolalpha \
-      << _LOG_TIMESTAMP severity " " \
-      << source.function_name() << " (" << source.file_name() << ":" << source.line() << "): " \
-      << msg << "\n"; \
+      << color _LOG_TIMESTAMP severity " " \
+      << source.function_name() << " (" << source.file_name() << ":" << source.line() << "):\033[0m " \
+      << msg << '\n'; \
     std::clog << logMsg.str(); \
   }
+#endif //!defined(FDL_LOG_MINIMAL)
 
 #define LOG_THIS "(this = " << this << ") "
 #define LOG_VAR(var) #var ": " << var << " "
+#define LOG_MEMBER(memberPtr) (memberPtr->cmIsTopic ? "Topic" : "Node") << "('" << memberPtr->mPrimaryKey << "'@" << memberPtr << ")"
 
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
-#define LOG_TRACE(msg)  _LOG("[TRACE]", msg)
+#define LOG_TRACE(msg)  _LOG("[TRACE]", "\033[0;36m", msg)
 #else
 #define LOG_TRACE(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
-#define LOG_DEBUG(msg)  _LOG("[DEBUG]", msg)
+#define LOG_DEBUG(msg)  _LOG("[DEBUG]", "\033[0;94m", msg)
 #else
 #define LOG_DEBUG(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
-#define LOG_INFO(msg)   _LOG("[INFO] ", msg)
+#define LOG_INFO(msg)   _LOG("[INFO] ", "\033[0;92m", msg)
 #else
 #define LOG_INFO(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
-#define LOG_WARN(msg)   _LOG("[WARN] ", msg)
+#define LOG_WARN(msg)   _LOG("[WARN] ", "\033[0;93m", msg)
 #else
 #define LOG_WARN(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
-#define LOG_ERROR(msg)  _LOG("[ERROR]", msg)
+#define LOG_ERROR(msg)  _LOG("[ERROR]", "\033[0;91m", msg)
 #else
 #define LOG_ERROR(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
-#define LOG_FATAL(msg)  _LOG("[FATAL]", msg)
+#define LOG_FATAL(msg)  _LOG("[FATAL]", "\033[0;95m", msg)
 #else
 #define LOG_FATAL(msg)
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL

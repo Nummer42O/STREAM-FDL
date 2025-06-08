@@ -114,6 +114,7 @@ static void getBlindspotsInternal(
   if (nrOutgoingEdges == 0ul ||
       (nrOutgoingEdges == 1ul && std::find(currentPath.begin(), currentPath.end(), outgoingEdges.front()) != currentPath.end()))
   {
+    LOG_TRACE(currentVertex << " is blindspot")
     oBlindSpots.push_back(currentVertex);
     return;
   }
@@ -139,9 +140,10 @@ MemberIds getBlindspots(const Graph &graph)
 
   // get a vector of all vertices in the graph
   MemberIds allVertices;
+  allVertices.reserve(graph.mVertices.size());
   std::transform(
     graph.mVertices.begin(), graph.mVertices.end(),
-    allVertices.begin(),
+    std::back_inserter(allVertices),
     [](const Graph::Vertices::value_type &vertex) -> MemberIds::value_type
     {
       return vertex.first;
@@ -154,6 +156,7 @@ MemberIds getBlindspots(const Graph &graph)
   {
     PrimaryKey vertex = allVertices.back();
     allVertices.pop_back();
+    LOG_TRACE("Starting new trace path from " LOG_VAR(vertex));
     getBlindspotsInternal(graph, {vertex}, allVertices, blindspots);
   }
 

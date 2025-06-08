@@ -11,7 +11,7 @@ namespace cr = std::chrono;
 
 Member::AttributeMapping Member::getAttributes()
 {
-  LOG_TRACE(LOG_THIS);
+  LOG_TRACE(LOG_MEMBER(this));
 
   AttributeMapping output;
   for (Attribute &attribute: mAttributes)
@@ -20,6 +20,7 @@ Member::AttributeMapping Member::getAttributes()
     if (attribute.sharedMemory.receive(shmResponse, false))
     {
       assert(shmResponse.header.type == sharedMem::NUMERICAL);
+      LOG_TRACE(LOG_MEMBER(this) " Attribute " << attribute.name << " got new value " << shmResponse.numerical.value);
       attribute.lastValue = shmResponse.numerical.value;
     }
     output.emplace(attribute.name, attribute.lastValue);
@@ -29,12 +30,13 @@ Member::AttributeMapping Member::getAttributes()
 
 void Member::addAttributeSource(const AttributeDescriptor &attributeName, const SingleAttributesResponse &response)
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(attributeName) "requestId: " << response.requestID << "memAddress: " << response.memAddress);
+  LOG_TRACE(LOG_MEMBER(this) LOG_VAR(attributeName) "requestId: " << response.requestID << "memAddress: " << response.memAddress);
 
   SharedMemory shm(util::parseString(response.memAddress));
   sharedMem::Response shmResponse = MAKE_RESPONSE;
   shm.receive(shmResponse);
   assert(shmResponse.header.type == sharedMem::NUMERICAL);
+  LOG_TRACE(LOG_MEMBER(this) "Initial attribute " << attributeName << " value: " << shmResponse.numerical.value);
 
   mAttributes.push_back(Attribute{
     .name = attributeName,
@@ -46,7 +48,7 @@ void Member::addAttributeSource(const AttributeDescriptor &attributeName, const 
 
 void Node::update(const NodeIsServerForUpdate &update)
 {
-  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.clientNodeId);
+  LOG_TRACE(LOG_MEMBER(this) "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.clientNodeId);
 
   std::string serviceName(util::parseString(update.srvName));
   ClientMapping::iterator it = mClients.find(serviceName);
@@ -58,7 +60,7 @@ void Node::update(const NodeIsServerForUpdate &update)
 
 void Node::update(const NodeIsActionServerForUpdate &update)
 {
-  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.actionclientNodeId);
+  LOG_TRACE(LOG_MEMBER(this) "primaryKey: " << update.primaryKey << "srv: " << update.srvName << "nodeId: " << update.actionclientNodeId);
 
   std::string serviceName(util::parseString(update.srvName));
   ClientMapping::iterator it = mClients.find(serviceName);
@@ -70,7 +72,7 @@ void Node::update(const NodeIsActionServerForUpdate &update)
 
 void Node::update(const NodeStateUpdate &update)
 {
-  LOG_TRACE(LOG_THIS "primaryKey: " << update.primaryKey << "state: " << update.state << "change time: " << update.stateChangeTime);
+  LOG_TRACE(LOG_MEMBER(this) "primaryKey: " << update.primaryKey << "state: " << update.state << "change time: " << update.stateChangeTime);
 
   bool isAliveNow = (update.state == sharedMem::State::ACTIVE);
   if (isAliveNow != mAlive)
@@ -89,8 +91,7 @@ Node::Node(const NodeResponse &response):
   mBootCount(response.bootCount),
   mProcessId(response.pid)
 {
-  //! TODO: reponse logging
-  LOG_TRACE(LOG_THIS);
+  LOG_TRACE(LOG_MEMBER(this) LOG_VAR(mPkgName) LOG_VAR(mAlive) LOG_VAR(mBootCount) LOG_VAR(mProcessId));
 }
 
 Topic::Topic(const TopicResponse &response):
@@ -98,6 +99,5 @@ Topic::Topic(const TopicResponse &response):
   mName(util::parseString(response.name)),
   mType(util::parseString(response.type))
 {
-  //! TODO: reponse logging
-  LOG_TRACE(LOG_THIS);
+  LOG_TRACE(LOG_MEMBER(this) LOG_VAR(mType));
 }

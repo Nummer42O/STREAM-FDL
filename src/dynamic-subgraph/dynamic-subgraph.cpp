@@ -32,14 +32,17 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
   while (running.load())
   {
+    LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter));
     if (mBlindSpotCheckCounter == 0ul)
       blindSpotCheck();
     mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
 
     Alerts emittedAlerts = mFD.getEmittedAlerts();
+    LOG_DEBUG("Got " << emittedAlerts.size() << " alerts.");
     expandSubgraph(emittedAlerts);
     if (checkAbortCirteria(emittedAlerts))
     {
+      LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
       mWatchlist.reset();
@@ -51,6 +54,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
     //! TODO: std::move emittedAlerts into FTE-Alert-DB
   }
+  LOG_INFO("Dynamic Subgraph Builder mainloop terminated.");
 
   faultDetection.join();
   dataStore.join();
@@ -62,6 +66,7 @@ void DynamicSubgraphBuilder::blindSpotCheck()
 
   Graph fullGraph = mpDataStore->getFullGraphView();
   MemberIds potentialBlindSpots = ::getBlindspots(fullGraph);
+  LOG_DEBUG(LOG_VAR(potentialBlindSpots));
   Members watchlistMembers = mWatchlist.getMembers();
 
   for (const PrimaryKey &member: potentialBlindSpots)
@@ -76,6 +81,7 @@ void DynamicSubgraphBuilder::blindSpotCheck()
     if (it != watchlistMembers.end())
       continue;
 
+    LOG_TRACE("Adding blindspot member " LOG_VAR(member) " to watchlist");
     if (fullGraph.get(member)->type == Graph::Vertex::TYPE_NODE)
       mWatchlist.addMember(mpDataStore->getNode(member), Watchlist::TYPE_BLINDSPOT);
     else
@@ -87,6 +93,8 @@ void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
 {
   LOG_TRACE(LOG_THIS);
 
+  //! TODO: This is not quite as the thesis describes…
+  //!       I think I need to write new Topics/Nodes to a seperate buffer and evaluate it here.
   for (const Alert &alert: newAlerts)
   {
     auto vertex = mSAG.add(alert.member);
@@ -111,8 +119,8 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
 
   // get average ammount of new alerts
   double meanNewAlerts = mLastNrAlerts.getMean();
-
   LOG_DEBUG(LOG_VAR(nrNewAlerts) LOG_VAR(meanNewAlerts) LOG_VAR(mSomethingIsGoingOn));
+
   // if we currently are not investigating any failure…
   if (!mSomethingIsGoingOn)
   {

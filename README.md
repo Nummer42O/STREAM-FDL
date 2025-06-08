@@ -22,8 +22,8 @@ Fault Detection and Localization Module for STREAM Pipeline.
 ## low priority
 - rethink some of the move semantics
 - determine actual config file schema
-  - transfer most, if not all, of the "magical value macros" to config
   - see thesis
+- DataStore::run frequency/wait time
 
 ## ideas
 - "new (adjacent) nodes" list

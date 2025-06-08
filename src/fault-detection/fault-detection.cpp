@@ -34,6 +34,7 @@ void FaultDetection::run(const std::atomic<bool> &running)
     // add their attributes to the moving window
     for (Member::Ptr member: currentWatchlistMembers)
     {
+      LOG_TRACE("Updating moving attribute window for member " << LOG_MEMBER(member));
       Member::AttributeMapping attributes = member->getAttributes();
 
       MemberWindow::iterator it = mMovingWindow.find(member);
@@ -46,8 +47,8 @@ void FaultDetection::run(const std::atomic<bool> &running)
     for (const auto &[memberPtr, attributeWindow]: mMovingWindow)
     {
       // if there ain't enough attribute values, skip
-      //! NOTE: the first attribute is selected as representing all,
-      //!       since all attribute buffers theoretically grow in parallel
+      //! NOTE: the first attribute is selected as representing all, since all
+      //!       attribute buffers for one member theoretically grow in parallel
       if (!attributeWindow.begin()->second.full())
         continue;
       mpWatchlist->notifyUsed(memberPtr);
@@ -56,6 +57,7 @@ void FaultDetection::run(const std::atomic<bool> &running)
       if (!detectFaults(memberPtr, attributeWindow, alert))
         continue;
 
+      LOG_DEBUG("Detected fault for member " << LOG_MEMBER(memberPtr));
       mAlertMutex.lock();
       mAlerts.push_back(alert);
       mAlertMutex.unlock();
@@ -72,7 +74,7 @@ FaultDetection::Alerts FaultDetection::getEmittedAlerts()
 {
   LOG_TRACE(LOG_THIS);
 
-  std::scoped_lock<std::mutex> scopeLock(mAlertMutex);
+  const std::lock_guard<std::mutex> scopeLock(mAlertMutex);
 
   Alerts output = mAlerts;
   //! TODO: add to DB

@@ -61,7 +61,7 @@ public:
 public:
   const bool cmIsTopic;
 
-  PrimaryKey     mPrimaryKey;
+  PrimaryKey  mPrimaryKey;
   Attributes  mAttributes;
 };
 using Members = std::vector<Member::Ptr>;

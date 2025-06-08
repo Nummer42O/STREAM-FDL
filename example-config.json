@@ -1,5 +1,10 @@
 {
-  "project-id": 1,
+  "ipc": {
+    "project-id": 1,
+    "retry-connection": true,
+    "retry-attempts": 5,
+    "retry-timeout-ms": 100
+  },
   "alert-rate": {
     "nr-normalisation-values": 10,
     "abortion-criteria-threshold": 0.05
