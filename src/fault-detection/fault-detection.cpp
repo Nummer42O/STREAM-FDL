@@ -32,6 +32,7 @@ void FaultDetection::run(const std::atomic<bool> &running)
     // retrieve all members currently on the watchlist
     Members currentWatchlistMembers = mpWatchlist->getMembers();
     // add their attributes to the moving window
+    //! TODO: This can somehow contain nullptr?!?!?!? HOW?
     for (Member::Ptr member: currentWatchlistMembers)
     {
       LOG_TRACE("Updating moving attribute window for member " << LOG_MEMBER(member));

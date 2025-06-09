@@ -29,6 +29,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
   std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running));
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running));
+  std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running));
 
   while (running.load())
   {
@@ -58,6 +59,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
   faultDetection.join();
   dataStore.join();
+  visualisation.join();
 }
 
 void DynamicSubgraphBuilder::blindSpotCheck()
@@ -108,6 +110,7 @@ void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
         );
     }
   }
+  mSAG.updateVisualisation();
 }
 
 bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)

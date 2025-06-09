@@ -3,7 +3,9 @@
 #include "dynamic-subgraph/members.hpp"
 
 #include <vector>
+#include <thread>
 #include <map>
+#include <atomic>
 
 
 class Graph
@@ -23,6 +25,10 @@ private:
   using Vertices = std::map<PrimaryKey, Vertex>;
 
 public:
+  Graph() {}
+  Graph(Graph &&other);
+  Graph(const Graph &other);
+
   const Vertex *addNode(
     const PrimaryKey &primary,
     MemberIds incomingEdges = {},
@@ -48,6 +54,11 @@ public:
     const Graph &graph
   );
 
+  void visualise(
+    const std::atomic<bool> &running
+  );
+
+  void updateVisualisation();
 
 private:
   const Vertex *add(
@@ -57,6 +68,8 @@ private:
 
 private:
   Vertices mVertices;
+  bool mUpdateVisualisation;
+  std::mutex mVisualisationMutex;
 };
 
 MemberIds getBlindspots(

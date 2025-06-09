@@ -24,6 +24,7 @@ Fault Detection and Localization Module for STREAM Pipeline.
 - determine actual config file schema
   - see thesis
 - DataStore::run frequency/wait time
+- optimise primaryKeys into byte arrays as they are of fixed size anyways
 
 ## ideas
 - "new (adjacent) nodes" list

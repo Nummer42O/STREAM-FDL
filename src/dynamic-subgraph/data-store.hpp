@@ -17,6 +17,7 @@ namespace json = nlohmann;
 #include <memory>
 #include <vector>
 #include <atomic>
+#include <thread>
 
 //#define PROJECT_ID  0
 
@@ -63,7 +64,6 @@ public:
 
   Graph getFullGraphView() const;
 
-  //! TODO: implement
   void run(
     const std::atomic<bool> &running
   );
@@ -86,6 +86,7 @@ private:
 private:
   Nodes         mNodes;
   Topics        mTopics;
+  std::mutex    mNodesMutex, mTopicsMutex;
   IpcClient     mIpcClient;
 
   static DataStore smInstance;

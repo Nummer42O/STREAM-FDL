@@ -60,10 +60,13 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(value));
 
-  iterator it = mBuffer.insert(mCurrent++, value);
-  if (mCurrent == mBuffer.end() &&
+  //! FIX: seg fault on some value of mCurrent
+  iterator it = mBuffer.insert(mCurrent, value);
+  if (it == mBuffer.end() &&
       mBuffer.size() == mMaxSize)
     mCurrent = mBuffer.begin();
+  else
+    mCurrent = it;
 
   return it;
 }

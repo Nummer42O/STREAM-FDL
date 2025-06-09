@@ -76,6 +76,8 @@ void DataStore::removeNode(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
+  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
   {
@@ -140,6 +142,8 @@ const Member::Ptr DataStore::getTopicByName(const std::string &name)
 void DataStore::removeTopic(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
+
+  const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
 
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)
@@ -288,6 +292,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);
     if (publishersToUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodePublishersToUpdate publishersToUpdateValue = publishersToUpdate.value();
       LOG_TRACE("Got NodePublishersToUpdate");
       mNodes.at(util::parseString(publishersToUpdateValue.primaryKey)).instance.update(publishersToUpdateValue);
@@ -295,6 +300,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeSubscribersToUpdate> subscribersToUpdate = mIpcClient.receiveNodeSubscribersToUpdate(false);
     if (subscribersToUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeSubscribersToUpdate subscribersToUpdateValue = subscribersToUpdate.value();
       LOG_TRACE("Got NodeSubscribersToUpdate");
       mNodes.at(util::parseString(subscribersToUpdateValue.primaryKey)).instance.update(subscribersToUpdateValue);
@@ -302,6 +308,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsServerForUpdate> isServerForUpdate = mIpcClient.receiveNodeIsServerForUpdate(false);
     if (isServerForUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeIsServerForUpdate isServerForUpdateValue = isServerForUpdate.value();
       LOG_TRACE("Got NodeIsServerForUpdate");
       mNodes.at(util::parseString(isServerForUpdateValue.primaryKey)).instance.update(isServerForUpdateValue);
@@ -309,6 +316,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsClientOfUpdate> isClientOfUpdate = mIpcClient.receiveNodeIsClientOfUpdate(false);
     if (isClientOfUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeIsClientOfUpdate isClientOfUpdateValue = isClientOfUpdate.value();
       LOG_TRACE("Got NodeIsClientOfUpdate");
       mNodes.at(util::parseString(isClientOfUpdateValue.primaryKey)).instance.update(isClientOfUpdateValue);
@@ -316,6 +324,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsActionServerForUpdate> isActionServerForUpdate = mIpcClient.receiveNodeIsActionServerForUpdate(false);
     if (isActionServerForUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeIsActionServerForUpdate isActionServerForUpdateValue = isActionServerForUpdate.value();
       LOG_TRACE("Got NodeIsActionServerForUpdate");
       mNodes.at(util::parseString(isActionServerForUpdateValue.primaryKey)).instance.update(isActionServerForUpdateValue);
@@ -323,6 +332,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsActionClientOfUpdate> isActionClientOfUpdate = mIpcClient.receiveNodeIsActionClientOfUpdate(false);
     if (isActionClientOfUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeIsActionClientOfUpdate isActionClientOfUpdateValue = isActionClientOfUpdate.value();
       LOG_TRACE("Got NodeIsActionClientOfUpdate");
       mNodes.at(util::parseString(isActionClientOfUpdateValue.primaryKey)).instance.update(isActionClientOfUpdateValue);
@@ -331,6 +341,7 @@ void DataStore::run(const std::atomic<bool> &running)
     // std::optional<NodeTimerToUpdate> timerToUpdate = mIpcClient.receiveNodeTimerToUpdate(false);
     // if (timerToUpdate.has_value())
     // {
+    //  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
     //   NodeTimerToUpdate timerToUpdateValue = timerToUpdate.value();
     //   LOG_TRACE("Got NodeTimerToUpdate");
     //   mNodes.at(util::parseString(timerToUpdateValue.primaryKey)).instance.update(timerToUpdateValue);
@@ -338,6 +349,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeStateUpdate> stateUpdate = mIpcClient.receiveNodeStateUpdate(false);
     if (stateUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
       NodeStateUpdate stateUpdateValue = stateUpdate.value();
       LOG_TRACE("Got NodeStateUpdate");
       mNodes.at(util::parseString(stateUpdateValue.primaryKey)).instance.update(stateUpdateValue);
@@ -345,6 +357,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<TopicPublishersUpdate> publishersUpdate = mIpcClient.receiveTopicPublishersUpdate(false);
     if (publishersUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
       TopicPublishersUpdate publishersUpdateValue = publishersUpdate.value();
       LOG_TRACE("Got TopicPublishersUpdate");
       mTopics.at(util::parseString(publishersUpdateValue.primaryKey)).instance.update(publishersUpdateValue);
@@ -352,6 +365,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<TopicSubscribersUpdate> subscribersUpdate = mIpcClient.receiveTopicSubscribersUpdate(false);
     if (subscribersUpdate.has_value())
     {
+      const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
       TopicSubscribersUpdate subscribersUpdateValue = subscribersUpdate.value();
       LOG_TRACE("Got TopicSubscribersUpdate");
       mTopics.at(util::parseString(subscribersUpdateValue.primaryKey)).instance.update(subscribersUpdateValue);
@@ -362,6 +376,9 @@ void DataStore::run(const std::atomic<bool> &running)
 Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
+
+  //! TODO: Maybe the higher level call actually needs to be scoped but lets see about that
+  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
 
   requestId_t requestId;
   NodeRequest nodeRequest{
@@ -403,6 +420,9 @@ Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
 Topic *DataStore::requestTopic(const PrimaryKey &primary, bool updates)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
+
+  //! TODO: Maybe the higher level call actually needs to be scoped but lets see about that
+  const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
 
   requestId_t requestId;
   TopicRequest topicRequest{

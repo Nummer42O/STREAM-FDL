@@ -118,7 +118,7 @@ void Watchlist::tryInitialise()
     mInitialMemberNames.begin(), mInitialMemberNames.end(),
     [&](const std::string &name) -> bool
     {
-      const Member::Ptr node = mpDataStore->getNode(name);
+      const Member::Ptr node = mpDataStore->getNodeByName(name);
       if (!node)
         return false;
 

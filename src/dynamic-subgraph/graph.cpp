@@ -2,8 +2,28 @@
 
 #include "common.hpp"
 
-#include <cassert>
+#include <graphviz/gvc.h>
+#include <graphviz/cgraph.h>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
 
+#include <cassert>
+#include <mutex>
+#include <set>
+#include <cstdio>
+
+
+Graph::Graph(Graph &&other):
+  mVertices(std::move(other.mVertices))
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+}
+
+Graph::Graph(const Graph &other):
+  mVertices(other.mVertices)
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(&other));
+}
 
 const Graph::Vertex *Graph::add(Member::Ptr member)
 {
@@ -81,6 +101,58 @@ const Graph::Vertex *Graph::get(const PrimaryKey &primary) const
     return &(it->second);
 
   return nullptr;
+}
+
+void Graph::visualise(const std::atomic<bool> &running)
+{
+  LOG_TRACE(LOG_THIS)
+
+  cv::Mat image = cv::Mat::ones(10, 10, CV_8UC4);
+  while (running.load())
+  {
+    if (mUpdateVisualisation)
+    {
+      LOG_DEBUG("updating visualisation")
+
+      Agraph_t *graph = agopen(const_cast<char *>("g"), Agdirected, NULL);
+      {
+        const std::lock_guard<std::mutex> scopedLock(mVisualisationMutex);
+
+        char cPrimaryKey[37];
+        for (const auto &[key, vertex]: mVertices)
+        {
+          std::strcpy(cPrimaryKey, key.c_str());
+          Agnode_t *fromNode = agnode(graph, cPrimaryKey, 1);
+          for (const PrimaryKey &to: vertex.outgoing)
+          {
+            std::strcpy(cPrimaryKey, to.c_str());
+            Agnode_t *toNode = agnode(graph, cPrimaryKey, 1);
+            agedge(graph, fromNode, toNode, NULL, 1);
+          }
+        }
+      }
+      mUpdateVisualisation = false;
+
+      std::FILE *graphFile = std::fopen("/tmp/render.png", "wb+");
+      assert(graphFile);
+      agwrite(graph, graphFile);
+      std::fclose(graphFile);
+
+      cv::Mat tmp = cv::imread("/tmp/render.png", cv::IMREAD_UNCHANGED);
+      LOG_DEBUG("New image is empty: " << tmp.empty());
+      if (!tmp.empty())
+        image = std::move(tmp);
+    }
+
+    cv::imshow("Subgraph", image);
+    cv::waitKey(100);
+  }
+}
+
+void Graph::updateVisualisation()
+{
+  // std::lock_guard<std::mutex> scopedLock(mVisualisationMutex);
+  mUpdateVisualisation = true;
 }
 
 const Graph::Vertex *Graph::add(const PrimaryKey &primary, Vertex vertex)
