@@ -38,12 +38,13 @@ void Member::addAttributeSource(const AttributeDescriptor &attributeName, const 
   assert(shmResponse.header.type == sharedMem::NUMERICAL);
   LOG_TRACE(LOG_MEMBER(this) "Initial attribute " << attributeName << " value: " << shmResponse.numerical.value);
 
-  mAttributes.push_back(Attribute{
-    .name = attributeName,
-    .sharedMemory = shm,
-    .requestId = response.requestID,
-    .lastValue = shmResponse.numerical.value
-  });
+  // Attribute attr{
+  //   .name = attributeName,
+  //   .sharedMemory = shm,
+  //   .requestId = response.requestID,
+  //   .lastValue = shmResponse.numerical.value
+  // };
+  mAttributes.emplace_back(attributeName, std::move(shm), response.requestID, shmResponse.numerical.value);
 }
 
 void Node::update(const NodeIsServerForUpdate &update)

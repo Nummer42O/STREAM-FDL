@@ -18,6 +18,7 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
 
 void Watchlist::addMember(Member::Ptr member, WatchlistMemberType type)
 {
+  assert(member != nullptr);
   LOG_TRACE(LOG_THIS LOG_VAR(member) "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
 
   const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
@@ -50,7 +51,8 @@ Members Watchlist::getMembers()
 
   tryInitialise();
 
-  Members output(mMembers.size());
+  Members output;
+  output.reserve(mMembers.size());
   std::transform(
     mMembers.begin(), mMembers.end(),
     std::back_inserter(output),
@@ -59,19 +61,6 @@ Members Watchlist::getMembers()
       return element.first;
     }
   );
-  /* removal should only happen after the first detection, not the first extraction -> thus use notifyUsed
-  std::remove_if(
-    mMembers.begin(), mMembers.end(),
-    [&](const InternalMembers::value_type &element) -> bool
-    {
-      if (element.second != TYPE_BLINDSPOT)
-        return false;
-
-      removeMember(element);
-      return true;
-    }
-  );
-  */
 
   return output;
 }
@@ -122,7 +111,7 @@ void Watchlist::tryInitialise()
       if (!node)
         return false;
 
-      mMembers.insert(InternalMembers::value_type(node, TYPE_INITIAL));
+      mMembers.emplace(node, TYPE_INITIAL);
       return true;
     }
   );
