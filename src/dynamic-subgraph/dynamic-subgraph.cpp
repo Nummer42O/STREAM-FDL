@@ -4,11 +4,6 @@
 
 #include <thread>
 
-//! TODO: actual values
-//#define ALERT_RATE_NORMALISATION_WINDOW_SIZE 10ul
-//#define BLINDSPOT_CHECK_ITERATION_INTERVAL 15ul
-//#define ABORT_CRITERIA_ALERT_RATE_THRESHOLD 0.05
-
 
 DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
   mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
@@ -18,9 +13,12 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
   mLastNrAlerts(config.at(CONFIG_ALERT_RATE).at(CONFIG_NR_NORMALISATION_VALUES).get<size_t>()),
   mBlindSpotCheckCounter(0ul),
   cmBlindspotInterval(config.at(CONFIG_BLINDSPOT_INTERVAL).get<size_t>()),
-  cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>())
+  cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>()),
+  cmMaximumCpuUtilisation(config.at(CONFIG_BLINDSPOT_CPU_THRESHOLD).get<double>())
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(dataStorePtr));
+
+  mCpuUtilisationSource = mpDataStore->getCpuUtilisationMemory();
 }
 
 void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
@@ -33,8 +31,14 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
   while (running.load())
   {
-    LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter));
-    if (mBlindSpotCheckCounter == 0ul)
+    sharedMem::Response resp = MAKE_RESPONSE;
+    mCpuUtilisationSource.receive(resp);
+    assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
+    assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
+    double cpuUtilisation = resp.numerical.value;
+
+    LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
+    if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
       blindSpotCheck();
     mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
 

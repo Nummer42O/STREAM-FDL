@@ -14,6 +14,8 @@ namespace json = nlohmann;
 #include <chrono>
 namespace cr = std::chrono;
 #include <thread>
+#include <unistd.h>
+#include <cstring>
 
 
 DataStore::DataStore(const json::json &config):
@@ -281,6 +283,34 @@ Graph DataStore::getFullGraphView() const
   }
 
   return output;
+}
+
+DataStore::SharedMemory DataStore::getCpuUtilisationMemory() const
+{
+  static_assert(MAX_STRING_SIZE >= HOST_NAME_MAX);
+  SearchRequest searchReq{
+    //! NOTE: its technically neither but as a passive component its interpreted as a topic
+    .type = SearchRequest::TOPIC
+  };
+  gethostname(searchReq.name, HOST_NAME_MAX);
+
+  requestId_t requestId;
+  mIpcClient.sendSearchRequest(searchReq, requestId);
+  SearchResponse searchResp = mIpcClient.receiveSearchResponse().value();
+
+  SingleAttributesRequest singleAttributeReq{
+    .attribute = AttributeName::CPU_UTILIZATION,
+    .direction = Direction::NONE,
+    .continuous = true
+  };
+  //! NOTE: I am aware that memcpy is considered insecure in regards to writing on unowned memory
+  //!       but as both buffers are the same size I don't see this exploding into our faces.
+  std::memcpy(singleAttributeReq.primaryKey, searchResp.primaryKey, MAX_STRING_SIZE);
+  mIpcClient.sendSingleAttributesRequest(singleAttributeReq, requestId);
+  SingleAttributesResponse singleAttrResp = mIpcClient.receiveSingleAttributesResponse().value();
+  assert(singleAttrResp.requestID == requestId);
+
+  return SharedMemory(util::parseString(singleAttrResp.memAddress));
 }
 
 void DataStore::run(const std::atomic<bool> &running)

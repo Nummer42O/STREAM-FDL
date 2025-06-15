@@ -21,6 +21,7 @@ namespace fs = std::filesystem;
 #define   CONFIG_NR_NORMALISATION_VALUES        "nr-normalisation-values"
 #define   CONFIG_ABORTION_CRITERIA_THRESHOLD    "abortion-criteria-threshold"
 #define CONFIG_BLINDSPOT_INTERVAL               "blindspot-interval"
+#define CONFIG_BLINDSPOT_CPU_THRESHOLD          "blindspot-cpu-threshold"
 #define CONFIG_WATCHLIST                        "initial-watchlist-members"
 #define CONFIG_FAULT_DETECTION                  "fault-detection"
 #define   CONFIG_MOVING_WINDOW_SIZE             "moving-window-size"

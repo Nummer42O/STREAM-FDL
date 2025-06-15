@@ -26,6 +26,7 @@ class DataStore
 {
 public:
   using Ptr = DataStore *; // std::shared_ptr<DataStore>;
+  using SharedMemory = Member::SharedMemory;
 
 private:
   template<typename T>
@@ -63,6 +64,7 @@ public:
   );
 
   Graph getFullGraphView() const;
+  SharedMemory getCpuUtilisationMemory() const;
 
   void run(
     const std::atomic<bool> &running

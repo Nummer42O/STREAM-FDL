@@ -50,6 +50,7 @@ private:
   FaultTrajectoryExtraction mFTE;
   Graph                     mSAG;
   DataStore::Ptr            mpDataStore;
+  DataStore::SharedMemory   mCpuUtilisationSource;
 
   bool                      mSomethingIsGoingOn;
   CircularBuffer            mLastNrAlerts;
@@ -57,4 +58,5 @@ private:
 
   const size_t              cmBlindspotInterval;
   const double              cmAbortionCriteriaThreshold;
+  const double              cmMaximumCpuUtilisation;
 };

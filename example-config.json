@@ -10,6 +10,7 @@
     "abortion-criteria-threshold": 0.05
   },
   "blindspot-interval": 15,
+  "blindspot-cpu-threshold": 0.8,
   "initial-watchlist-members": [
     "/hallo/erde/erde_listener"
   ],
