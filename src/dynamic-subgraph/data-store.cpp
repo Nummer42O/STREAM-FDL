@@ -329,7 +329,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodePublishersToUpdate publishersToUpdateValue = publishersToUpdate.value();
       LOG_TRACE("Got NodePublishersToUpdate");
-      mNodes.at(util::parseString(publishersToUpdateValue.primaryKey)).instance.update(publishersToUpdateValue);
+      PrimaryKey primaryKey = util::parseString(publishersToUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(publishersToUpdateValue);
     }
     std::optional<NodeSubscribersToUpdate> subscribersToUpdate = mIpcClient.receiveNodeSubscribersToUpdate(false);
     if (subscribersToUpdate.has_value())
@@ -337,7 +340,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeSubscribersToUpdate subscribersToUpdateValue = subscribersToUpdate.value();
       LOG_TRACE("Got NodeSubscribersToUpdate");
-      mNodes.at(util::parseString(subscribersToUpdateValue.primaryKey)).instance.update(subscribersToUpdateValue);
+      PrimaryKey primaryKey = util::parseString(subscribersToUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(subscribersToUpdateValue);
     }
     std::optional<NodeIsServerForUpdate> isServerForUpdate = mIpcClient.receiveNodeIsServerForUpdate(false);
     if (isServerForUpdate.has_value())
@@ -345,7 +351,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeIsServerForUpdate isServerForUpdateValue = isServerForUpdate.value();
       LOG_TRACE("Got NodeIsServerForUpdate");
-      mNodes.at(util::parseString(isServerForUpdateValue.primaryKey)).instance.update(isServerForUpdateValue);
+      PrimaryKey primaryKey = util::parseString(isServerForUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(isServerForUpdateValue);
     }
     std::optional<NodeIsClientOfUpdate> isClientOfUpdate = mIpcClient.receiveNodeIsClientOfUpdate(false);
     if (isClientOfUpdate.has_value())
@@ -353,7 +362,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeIsClientOfUpdate isClientOfUpdateValue = isClientOfUpdate.value();
       LOG_TRACE("Got NodeIsClientOfUpdate");
-      mNodes.at(util::parseString(isClientOfUpdateValue.primaryKey)).instance.update(isClientOfUpdateValue);
+      PrimaryKey primaryKey = util::parseString(isClientOfUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(isClientOfUpdateValue);
     }
     std::optional<NodeIsActionServerForUpdate> isActionServerForUpdate = mIpcClient.receiveNodeIsActionServerForUpdate(false);
     if (isActionServerForUpdate.has_value())
@@ -361,7 +373,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionServerForUpdate isActionServerForUpdateValue = isActionServerForUpdate.value();
       LOG_TRACE("Got NodeIsActionServerForUpdate");
-      mNodes.at(util::parseString(isActionServerForUpdateValue.primaryKey)).instance.update(isActionServerForUpdateValue);
+      PrimaryKey primaryKey = util::parseString(isActionServerForUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(isActionServerForUpdateValue);
     }
     std::optional<NodeIsActionClientOfUpdate> isActionClientOfUpdate = mIpcClient.receiveNodeIsActionClientOfUpdate(false);
     if (isActionClientOfUpdate.has_value())
@@ -369,7 +384,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionClientOfUpdate isActionClientOfUpdateValue = isActionClientOfUpdate.value();
       LOG_TRACE("Got NodeIsActionClientOfUpdate");
-      mNodes.at(util::parseString(isActionClientOfUpdateValue.primaryKey)).instance.update(isActionClientOfUpdateValue);
+      PrimaryKey primaryKey = util::parseString(isActionClientOfUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(isActionClientOfUpdateValue);
     }
     //! NOTE: not currently regarded
     // std::optional<NodeTimerToUpdate> timerToUpdate = mIpcClient.receiveNodeTimerToUpdate(false);
@@ -378,7 +396,10 @@ void DataStore::run(const std::atomic<bool> &running)
     //   const ScopeLock scopedLock(mNodesMutex);
     //   NodeTimerToUpdate timerToUpdateValue = timerToUpdate.value();
     //   LOG_TRACE("Got NodeTimerToUpdate");
-    //   mNodes.at(util::parseString(timerToUpdateValue.primaryKey)).instance.update(timerToUpdateValue);
+    //   PrimaryKey primaryKey = at(util::parseString(timerToUpdateValue.;
+    //   while (!mNodes.contains(primaryKey))
+    //     std::this_thread::sleep_for(100ms);
+    //   mNodes.primaryKeyprimaryKey)).instance.update(timerToUpdateValue);
     // }
     std::optional<NodeStateUpdate> stateUpdate = mIpcClient.receiveNodeStateUpdate(false);
     if (stateUpdate.has_value())
@@ -386,7 +407,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mNodesMutex);
       NodeStateUpdate stateUpdateValue = stateUpdate.value();
       LOG_TRACE("Got NodeStateUpdate");
-      mNodes.at(util::parseString(stateUpdateValue.primaryKey)).instance.update(stateUpdateValue);
+      PrimaryKey primaryKey = util::parseString(stateUpdateValue.primaryKey);
+      while (!mNodes.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mNodes.at(primaryKey).instance.update(stateUpdateValue);
     }
     std::optional<TopicPublishersUpdate> publishersUpdate = mIpcClient.receiveTopicPublishersUpdate(false);
     if (publishersUpdate.has_value())
@@ -394,7 +418,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mTopicsMutex);
       TopicPublishersUpdate publishersUpdateValue = publishersUpdate.value();
       LOG_TRACE("Got TopicPublishersUpdate");
-      mTopics.at(util::parseString(publishersUpdateValue.primaryKey)).instance.update(publishersUpdateValue);
+      PrimaryKey primaryKey = util::parseString(publishersUpdateValue.primaryKey);
+      while (!mTopics.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mTopics.at(primaryKey).instance.update(publishersUpdateValue);
     }
     std::optional<TopicSubscribersUpdate> subscribersUpdate = mIpcClient.receiveTopicSubscribersUpdate(false);
     if (subscribersUpdate.has_value())
@@ -402,7 +429,10 @@ void DataStore::run(const std::atomic<bool> &running)
       const ScopeLock scopedLock(mTopicsMutex);
       TopicSubscribersUpdate subscribersUpdateValue = subscribersUpdate.value();
       LOG_TRACE("Got TopicSubscribersUpdate");
-      mTopics.at(util::parseString(subscribersUpdateValue.primaryKey)).instance.update(subscribersUpdateValue);
+      PrimaryKey primaryKey = util::parseString(subscribersUpdateValue.primaryKey);
+      while (!mTopics.contains(primaryKey))
+        std::this_thread::sleep_for(100ms);
+      mTopics.at(primaryKey).instance.update(subscribersUpdateValue);
     }
   }
 }
@@ -443,21 +473,8 @@ Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
     .continuous = true
   };
   util::parseString(req.primaryKey, node->mPrimaryKey);
-  std::optional<SingleAttributesResponse> optResponse;
-  int i = 0;
-  do
-  {
-    LOG_TRACE("SingleAttribute attempt " << i);
-    mIpcClient.sendSingleAttributesRequest(req, requestId);
-    optResponse = mIpcClient.receiveSingleAttributesResponse(false);
-    if (!optResponse.has_value())
-    {
-      std::this_thread::sleep_for(1s);
-      optResponse = mIpcClient.receiveSingleAttributesResponse(false);
-    }
-    ++i;
-  } while (!optResponse.has_value());
-  SingleAttributesResponse response = optResponse.value();
+  mIpcClient.sendSingleAttributesRequest(req, requestId);
+  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
   assert(requestId == response.requestID);
 
   LOG_TRACE("Added CPU utilisation attribute to " << LOG_MEMBER((node)) " with shared memory location: " << response.memAddress);
