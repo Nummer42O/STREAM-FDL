@@ -116,7 +116,7 @@ void Graph::visualise(const std::atomic<bool> &running)
 
       Agraph_t *graph = agopen(const_cast<char *>("g"), Agdirected, NULL);
       {
-        const std::lock_guard<std::mutex> scopedLock(mVisualisationMutex);
+        const ScopeLock scopedLock(mVisualisationMutex);
 
         char cPrimaryKey[37];
         for (const auto &[key, vertex]: mVertices)

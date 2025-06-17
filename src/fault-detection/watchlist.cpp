@@ -21,7 +21,7 @@ void Watchlist::addMember(Member::Ptr member, WatchlistMemberType type)
   assert(member != nullptr);
   LOG_TRACE(LOG_THIS LOG_VAR(member) "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
 
-  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
+  const ScopeLock scopeLock(mMembersMutex);
 
   InternalMembers::iterator it = mMembers.find(member);
   if (it == mMembers.end())
@@ -34,7 +34,7 @@ void Watchlist::removeMember(Member::Ptr member)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member));
 
-  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
+  const ScopeLock scopeLock(mMembersMutex);
 
   InternalMembers::iterator it = mMembers.find(member);
   if (it == mMembers.end())
@@ -47,7 +47,7 @@ Members Watchlist::getMembers()
 {
   LOG_TRACE(LOG_THIS);
 
-  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
+  const ScopeLock scopeLock(mMembersMutex);
 
   tryInitialise();
 
@@ -69,7 +69,7 @@ void Watchlist::reset()
 {
   LOG_TRACE(LOG_THIS);
 
-  const std::lock_guard<std::mutex> scopeLock(mMembersMutex);
+  const ScopeLock scopeLock(mMembersMutex);
 
   for (InternalMembers::iterator it = mMembers.begin(); it != mMembers.end();)
   {
@@ -90,7 +90,7 @@ void Watchlist::notifyUsed(Member::Ptr member)
     return;
 
   {
-    const std::lock_guard<std::mutex> scopedLock(mMembersMutex);
+    const ScopeLock scopedLock(mMembersMutex);
 
     removeMember(memberIt);
   }

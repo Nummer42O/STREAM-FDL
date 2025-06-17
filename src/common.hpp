@@ -1,5 +1,10 @@
 #pragma once
 
+#define BOOST_STACKTRACE_LINK
+#include <boost/stacktrace.hpp>
+#include <boost/stacktrace/frame.hpp>
+namespace st = boost::stacktrace;
+
 #include <chrono>
 namespace cr = std::chrono;
 #include <ctime>
@@ -10,6 +15,7 @@ namespace cr = std::chrono;
 #include <source_location>
 #include <filesystem>
 namespace fs = std::filesystem;
+#include <thread>
 
 
 #define CONFIG_IPC                              "ipc"
@@ -47,6 +53,7 @@ namespace fs = std::filesystem;
 #endif // defined(FDL_LOG_TIMESTAMP)
 
 #ifdef FDL_LOG_MINIMAL
+/*
 #define _LOG(severity, color, msg) \
   { \
     const std::source_location source = std::source_location::current(); \
@@ -60,6 +67,23 @@ namespace fs = std::filesystem;
     logMsg << std::boolalpha \
       << color severity "(" << shortSourceFile.string() << ':' << source.line() << ") " << source.function_name() << ":\033[0m " \
       << msg << '\n'; \
+    std::clog << logMsg.str(); \
+  }
+*/
+#define _LOG(severity, color, msg) \
+  { \
+    st::stacktrace trace; \
+    st::stacktrace::reverse_iterator \
+      rit = trace.rbegin(), \
+      endRit = trace.rend(); \
+    while (rit != endRit && rit->source_file().find("/home/ubuntu/stream/STREAM-FDL") == std::string::npos) \
+      ++rit; \
+    std::stringstream logMsg; \
+    logMsg << std::boolalpha << color severity "(" << rit->name(); \
+    while (++rit != endRit) \
+      if (rit->source_file().find("/home/ubuntu/stream/STREAM-FDL") != std::string::npos) \
+        logMsg << " -> " << rit->name(); \
+    logMsg << "):\033[0m " << msg << "\n\n"; \
     std::clog << logMsg.str(); \
   }
 #else
@@ -133,3 +157,35 @@ std::ostream &operator<<(std::ostream &stream, const std::vector<T> &v)
   stream << '}';
   return stream;
 }
+
+class ScopeLock
+{
+public:
+  explicit ScopeLock(std::mutex &mutex):
+    mrMutex(mutex)
+  {
+    LOG_INFO(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
+    mrMutex.lock();
+    LOG_INFO(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
+  }
+
+  ScopeLock(std::mutex &mutex, std::adopt_lock_t) noexcept:
+    mrMutex(mutex)
+  {
+    LOG_INFO(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
+    mrMutex.lock();
+    LOG_INFO(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
+  }
+
+  ~ScopeLock()
+  {
+    mrMutex.unlock();
+    LOG_INFO(LOG_THIS " Unlocked mutex");
+  }
+
+  ScopeLock(const ScopeLock&) = delete;
+  ScopeLock& operator=(const ScopeLock&) = delete;
+
+private:
+  std::mutex &mrMutex;
+};

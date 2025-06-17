@@ -13,6 +13,7 @@ namespace json = nlohmann;
 #include <optional>
 #include <chrono>
 namespace cr = std::chrono;
+using namespace std::chrono_literals;
 #include <thread>
 #include <unistd.h>
 #include <cstring>
@@ -78,7 +79,7 @@ void DataStore::removeNode(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+  const ScopeLock scopedLock(mNodesMutex);
 
   Nodes::iterator nodeIt = mNodes.find(primary);
   if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
@@ -132,9 +133,9 @@ const Member::Ptr DataStore::getTopicByName(const std::string &name)
   };
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
-
   PrimaryKey primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
   LOG_TRACE("SearchRequest returned primary key: '" << primaryKey << "'");
+
   if (primaryKey.empty())
     return nullptr;
   else
@@ -145,7 +146,7 @@ void DataStore::removeTopic(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
+  const ScopeLock scopedLock(mTopicsMutex);
 
   Topics::iterator topicIt = mTopics.find(primary);
   if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)
@@ -183,8 +184,6 @@ Graph DataStore::getFullGraphView() const
   };
   requestId_t requestId;
   mIpcClient.sendCustomMemberRequest(req, requestId);
-
-  // receive response with shared memory location for transmission
   CustomMemberResponse resp = mIpcClient.receiveCustomMemberResponse().value();
   assert(resp.requestID == requestId);
   LOG_TRACE(LOG_VAR(resp.memAddress));
@@ -199,12 +198,13 @@ Graph DataStore::getFullGraphView() const
     assert(response.header.type == sharedMem::ResponseType::TEXTUAL);
     assert(previousNumber < response.textual.number);
     previousNumber = response.textual.number;
-    LOG_DEBUG("Receiving package " << response.textual.number << '/' << response.textual.total);
+    if (response.textual.number % 10 == 0)
+      LOG_DEBUG("Receiving package " << response.textual.number << '/' << response.textual.total);
 
     std::string responseLine = util::parseString(response.textual.line);
     std::move(responseLine.begin(), responseLine.end(), std::back_inserter(queryResponseString));
   } while (response.textual.number < response.textual.total);
-  LOG_DEBUG("Full query response: " << queryResponseString);
+  LOG_TRACE("Full query response: " << queryResponseString);
 
   // load query response as json and navigate to data of interest
   json::json queryResponseData = json::json::parse(queryResponseString);
@@ -287,16 +287,20 @@ Graph DataStore::getFullGraphView() const
 
 DataStore::SharedMemory DataStore::getCpuUtilisationMemory() const
 {
+  LOG_TRACE(LOG_THIS);
+
   static_assert(MAX_STRING_SIZE >= HOST_NAME_MAX);
   SearchRequest searchReq{
     //! NOTE: its technically neither but as a passive component its interpreted as a topic
     .type = SearchRequest::TOPIC
   };
   gethostname(searchReq.name, HOST_NAME_MAX);
+  LOG_DEBUG("Host name in search request: " << searchReq.name);
 
   requestId_t requestId;
   mIpcClient.sendSearchRequest(searchReq, requestId);
   SearchResponse searchResp = mIpcClient.receiveSearchResponse().value();
+  LOG_TRACE("Got member with primaryKey: " << searchResp.primaryKey);
 
   SingleAttributesRequest singleAttributeReq{
     .attribute = AttributeName::CPU_UTILIZATION,
@@ -322,7 +326,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);
     if (publishersToUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodePublishersToUpdate publishersToUpdateValue = publishersToUpdate.value();
       LOG_TRACE("Got NodePublishersToUpdate");
       mNodes.at(util::parseString(publishersToUpdateValue.primaryKey)).instance.update(publishersToUpdateValue);
@@ -330,7 +334,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeSubscribersToUpdate> subscribersToUpdate = mIpcClient.receiveNodeSubscribersToUpdate(false);
     if (subscribersToUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeSubscribersToUpdate subscribersToUpdateValue = subscribersToUpdate.value();
       LOG_TRACE("Got NodeSubscribersToUpdate");
       mNodes.at(util::parseString(subscribersToUpdateValue.primaryKey)).instance.update(subscribersToUpdateValue);
@@ -338,7 +342,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsServerForUpdate> isServerForUpdate = mIpcClient.receiveNodeIsServerForUpdate(false);
     if (isServerForUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeIsServerForUpdate isServerForUpdateValue = isServerForUpdate.value();
       LOG_TRACE("Got NodeIsServerForUpdate");
       mNodes.at(util::parseString(isServerForUpdateValue.primaryKey)).instance.update(isServerForUpdateValue);
@@ -346,7 +350,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsClientOfUpdate> isClientOfUpdate = mIpcClient.receiveNodeIsClientOfUpdate(false);
     if (isClientOfUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeIsClientOfUpdate isClientOfUpdateValue = isClientOfUpdate.value();
       LOG_TRACE("Got NodeIsClientOfUpdate");
       mNodes.at(util::parseString(isClientOfUpdateValue.primaryKey)).instance.update(isClientOfUpdateValue);
@@ -354,7 +358,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsActionServerForUpdate> isActionServerForUpdate = mIpcClient.receiveNodeIsActionServerForUpdate(false);
     if (isActionServerForUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionServerForUpdate isActionServerForUpdateValue = isActionServerForUpdate.value();
       LOG_TRACE("Got NodeIsActionServerForUpdate");
       mNodes.at(util::parseString(isActionServerForUpdateValue.primaryKey)).instance.update(isActionServerForUpdateValue);
@@ -362,7 +366,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeIsActionClientOfUpdate> isActionClientOfUpdate = mIpcClient.receiveNodeIsActionClientOfUpdate(false);
     if (isActionClientOfUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionClientOfUpdate isActionClientOfUpdateValue = isActionClientOfUpdate.value();
       LOG_TRACE("Got NodeIsActionClientOfUpdate");
       mNodes.at(util::parseString(isActionClientOfUpdateValue.primaryKey)).instance.update(isActionClientOfUpdateValue);
@@ -371,7 +375,7 @@ void DataStore::run(const std::atomic<bool> &running)
     // std::optional<NodeTimerToUpdate> timerToUpdate = mIpcClient.receiveNodeTimerToUpdate(false);
     // if (timerToUpdate.has_value())
     // {
-    //  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+    //   const ScopeLock scopedLock(mNodesMutex);
     //   NodeTimerToUpdate timerToUpdateValue = timerToUpdate.value();
     //   LOG_TRACE("Got NodeTimerToUpdate");
     //   mNodes.at(util::parseString(timerToUpdateValue.primaryKey)).instance.update(timerToUpdateValue);
@@ -379,7 +383,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<NodeStateUpdate> stateUpdate = mIpcClient.receiveNodeStateUpdate(false);
     if (stateUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
+      const ScopeLock scopedLock(mNodesMutex);
       NodeStateUpdate stateUpdateValue = stateUpdate.value();
       LOG_TRACE("Got NodeStateUpdate");
       mNodes.at(util::parseString(stateUpdateValue.primaryKey)).instance.update(stateUpdateValue);
@@ -387,7 +391,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<TopicPublishersUpdate> publishersUpdate = mIpcClient.receiveTopicPublishersUpdate(false);
     if (publishersUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
+      const ScopeLock scopedLock(mTopicsMutex);
       TopicPublishersUpdate publishersUpdateValue = publishersUpdate.value();
       LOG_TRACE("Got TopicPublishersUpdate");
       mTopics.at(util::parseString(publishersUpdateValue.primaryKey)).instance.update(publishersUpdateValue);
@@ -395,7 +399,7 @@ void DataStore::run(const std::atomic<bool> &running)
     std::optional<TopicSubscribersUpdate> subscribersUpdate = mIpcClient.receiveTopicSubscribersUpdate(false);
     if (subscribersUpdate.has_value())
     {
-      const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
+      const ScopeLock scopedLock(mTopicsMutex);
       TopicSubscribersUpdate subscribersUpdateValue = subscribersUpdate.value();
       LOG_TRACE("Got TopicSubscribersUpdate");
       mTopics.at(util::parseString(subscribersUpdateValue.primaryKey)).instance.update(subscribersUpdateValue);
@@ -407,78 +411,93 @@ Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
 
-  //! TODO: Maybe the higher level call actually needs to be scoped but lets see about that
-  const std::lock_guard<std::mutex> scopedLock(mNodesMutex);
-
-  requestId_t requestId;
   NodeRequest nodeRequest{
     .updates = updates
   };
   util::parseString(nodeRequest.primaryKey, primary);
+  requestId_t requestId;
   mIpcClient.sendNodeRequest(nodeRequest, requestId);
+  NodeResponse nodeResponse = mIpcClient.receiveNodeResponse().value();
 
-  auto [it, emplaced] = mNodes.emplace(
-    primary,
-    MemberData<Node>{
-      .instance = Node(mIpcClient.receiveNodeResponse().value()),
-      .requestId = requestId,
-      .useCounter = 1ul
-    }
-  );
-  assert(emplaced);
-  LOG_TRACE("Created node " << LOG_MEMBER((&(it->second.instance))));
+  Node *node;
+  {
+    const ScopeLock scopedLock(mTopicsMutex);
 
-  //! TODO: This should happen in a loop over a list of all available attribute types.
-  //! NOTE: However, IPC doesn't provide a pipeline to get those yet, so we set the
-  //!       ones we know of manually.
-  const Node &node = it->second.instance;
+    auto [it, emplaced] = mNodes.emplace(
+      primary,
+      MemberData<Node>{
+        .instance = Node(nodeResponse),
+        .requestId = requestId,
+        .useCounter = 1ul
+      }
+    );
+    assert(emplaced);
+    //! NOTE: Taking a pointer to this iterator while mutex is locked, as other requestNode calls may invalidate it
+    node = &(it->second.instance);
+  }
+  LOG_TRACE("Created node " << LOG_MEMBER((node)));
+
   SingleAttributesRequest req{
     .attribute = AttributeName::CPU_UTILIZATION,
     .direction = Direction::NONE,
     .continuous = true
   };
-  util::parseString(req.primaryKey, node.mPrimaryKey);
-  mIpcClient.sendSingleAttributesRequest(req, requestId);
-  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
+  util::parseString(req.primaryKey, node->mPrimaryKey);
+  std::optional<SingleAttributesResponse> optResponse;
+  int i = 0;
+  do
+  {
+    LOG_TRACE("SingleAttribute attempt " << i);
+    mIpcClient.sendSingleAttributesRequest(req, requestId);
+    optResponse = mIpcClient.receiveSingleAttributesResponse(false);
+    if (!optResponse.has_value())
+    {
+      std::this_thread::sleep_for(1s);
+      optResponse = mIpcClient.receiveSingleAttributesResponse(false);
+    }
+    ++i;
+  } while (!optResponse.has_value());
+  SingleAttributesResponse response = optResponse.value();
   assert(requestId == response.requestID);
 
-  LOG_TRACE("Added CPU utilisation attribute to " << LOG_MEMBER((&(it->second.instance))) " with shared memory location: " << response.memAddress);
-  it->second.instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
-  return &(it->second.instance);
+  LOG_TRACE("Added CPU utilisation attribute to " << LOG_MEMBER((node)) " with shared memory location: " << response.memAddress);
+  node->addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+  return node;
 }
 
 Topic *DataStore::requestTopic(const PrimaryKey &primary, bool updates)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
 
-  //! TODO: Maybe the higher level call actually needs to be scoped but lets see about that
-  const std::lock_guard<std::mutex> scopedLock(mTopicsMutex);
-
-  requestId_t requestId;
   TopicRequest topicRequest{
     .updates = updates
   };
   util::parseString(topicRequest.primaryKey, primary);
+  requestId_t requestId;
   mIpcClient.sendTopicRequest(topicRequest, requestId);
+  TopicResponse topicResponse = mIpcClient.receiveTopicResponse().value();
 
-  auto [it, emplaced] = mTopics.emplace(
-    primary,
-    MemberData<Topic>{
-      .instance = Topic(mIpcClient.receiveTopicResponse().value()),
-      .requestId = requestId,
-      .useCounter = 1ul
-    }
-  );
-  assert(emplaced);
-  LOG_TRACE("Created topic " << LOG_MEMBER((&(it->second.instance))));
+  Topic *topic;
+  {
+    const ScopeLock scopedLock(mTopicsMutex);
 
-  //! TODO: This should happen in a loop over a list of all available attribute types.
-  //! NOTE: However, IPC doesn't provide a pipeline to get those yet, so we set the
-  //!       ones we know of manually.
-  const Topic &topic = it->second.instance;
+    auto [it, emplaced] = mTopics.emplace(
+      primary,
+      MemberData<Topic>{
+        .instance = Topic(topicResponse),
+        .requestId = requestId,
+        .useCounter = 1ul
+      }
+    );
+    assert(emplaced);
+    //! NOTE: Taking a pointer to this iterator while mutex is locked, as other requestTopic calls may invalidate it
+    topic = &(it->second.instance);
+  }
+
+  LOG_TRACE("Created topic " << LOG_MEMBER((topic)));
   SingleAttributesResponse response;
   std::string attributeName;
-  for (const Topic::Edges::value_type &edge: topic.mPublishers)
+  for (const Topic::Edges::value_type &edge: topic->mPublishers)
   {
     SingleAttributesRequest req{
       .attribute = AttributeName::PUBLISHINGRATES,
@@ -488,13 +507,14 @@ Topic *DataStore::requestTopic(const PrimaryKey &primary, bool updates)
     util::parseString(req.primaryKey, edge.self);
     mIpcClient.sendSingleAttributesRequest(req, requestId);
     response = mIpcClient.receiveSingleAttributesResponse().value();
+    assert(requestId == response.requestID);
     attributeName = std::to_string(AttributeName::PUBLISHINGRATES) + ": " + edge.self;
 
-    LOG_TRACE("Added attribute " << attributeName << " to " << LOG_MEMBER((&(it->second.instance))) " with shared memory location: " << response.memAddress);
-    it->second.instance.addAttributeSource(attributeName, response);
+    LOG_TRACE("Added attribute " << attributeName << " to " << LOG_MEMBER((topic)) " with shared memory location: " << response.memAddress);
+    topic->addAttributeSource(attributeName, response);
   }
 
-  return &(it->second.instance);
+  return topic;
 }
 
 IpcClient DataStore::tryMakeIpcClient(const json::json &config)

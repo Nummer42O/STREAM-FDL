@@ -40,6 +40,7 @@ target_compile_definitions(main
     ${_log_level_definition}
     ${_log_timestamp_definition}
     ${_log_minimal_definition}
+    FDL_LOG_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 add_subdirectory(src)

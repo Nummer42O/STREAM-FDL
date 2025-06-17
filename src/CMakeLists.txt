@@ -12,6 +12,11 @@ pkg_check_modules(
     libgvc
   REQUIRED
 )
+find_package(Boost 1.74
+  COMPONENTS
+    stacktrace_backtrace
+  REQUIRED
+)
 
 target_sources(main
   PRIVATE
@@ -24,6 +29,7 @@ target_link_libraries(main
     ${CMAKE_DL_LIBS}
     ${OpenCV_LIBS}
     ${GraphViz_LIBRARIES}
+    Boost::stacktrace_backtrace
 )
 
 add_subdirectory(dynamic-subgraph)
