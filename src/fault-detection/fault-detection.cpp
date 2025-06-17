@@ -38,7 +38,7 @@ void FaultDetection::run(const std::atomic<bool> &running)
       Member::AttributeMapping attributes = member->getAttributes();
 
       MemberWindow::iterator it = mMovingWindow.find(member);
-      if (it != mMovingWindow.end())
+      if (it == mMovingWindow.end())
         mMovingWindow.emplace(member, createAttrWindow(attributes));
       else
         updateAttrWindow(it->second, attributes);

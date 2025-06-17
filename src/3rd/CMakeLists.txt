@@ -15,3 +15,7 @@ target_link_libraries(main
     ipc_lib
     nlohmann_json::nlohmann_json
 )
+target_link_libraries(msg-queue-monitor
+  PUBLIC
+    ipc_lib
+)

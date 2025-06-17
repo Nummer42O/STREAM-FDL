@@ -32,6 +32,11 @@ target_link_libraries(main
     Boost::stacktrace_backtrace
 )
 
+target_sources(msg-queue-monitor
+  PRIVATE
+    msg-queue-monitor.cpp
+)
+
 add_subdirectory(dynamic-subgraph)
 add_subdirectory(fault-detection)
 add_subdirectory(fault-trajectory-extraction)

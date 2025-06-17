@@ -3,7 +3,7 @@
     "project-id": 1,
     "retry-connection": true,
     "retry-attempts": 5,
-    "retry-timeout-ms": 100
+    "retry-timeout-ms": 1000
   },
   "alert-rate": {
     "nr-normalisation-values": 10,

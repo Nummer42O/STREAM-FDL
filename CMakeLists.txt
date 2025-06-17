@@ -22,6 +22,10 @@ endif()
 set(FDL_LOG_LEVEL "2" CACHE STRING "Minimum log level (TRACE: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4, FATAL: 5) (default: 2)")
 set(_log_level_definition "FDL_LOG_LEVEL=${FDL_LOG_LEVEL}")
 
+add_compile_options(
+  -save-temps=obj
+)
+
 add_executable(main)
 target_include_directories(main
   PUBLIC
@@ -42,6 +46,20 @@ target_compile_definitions(main
     ${_log_minimal_definition}
     FDL_LOG_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
+
+add_executable(msg-queue-monitor)
+target_include_directories(msg-queue-monitor
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${_install_include_dir}>
+  PRIVATE
+    src
+)
+target_compile_options(msg-queue-monitor
+  PRIVATE
+    -Wall -Wextra -Wpedantic -Wno-ignored-qualifiers -Werror
+)
+
 
 add_subdirectory(src)
 
