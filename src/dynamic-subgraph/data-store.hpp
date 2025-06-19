@@ -1,7 +1,8 @@
 #pragma once
 
 #include "dynamic-subgraph/members.hpp"
-#include "dynamic-subgraph/graph.hpp"
+#include "dynamic-subgraph/atomic-counter.hpp"
+#include "dynamic-subgraph/double-linked-list.hpp"
 
 #include "ipc/common.hpp"
 #include "ipc/datastructs/information-datastructs.hpp"
@@ -16,10 +17,7 @@ namespace json = nlohmann;
 #include <string_view>
 #include <memory>
 #include <vector>
-#include <atomic>
 #include <thread>
-
-//#define PROJECT_ID  0
 
 
 class DataStore
@@ -27,43 +25,39 @@ class DataStore
 public:
   using Ptr = DataStore *; // std::shared_ptr<DataStore>;
   using SharedMemory = Member::SharedMemory;
+  struct MemberConnections
+  {
+    MemberProxy member;
+    MemberProxies connections;
+  };
+  using GraphView = std::vector<MemberConnections>;
 
 private:
-  template<typename T>
-  struct MemberData
-  {
-    T instance;
-    requestId_t requestId;
-    size_t useCounter;
-  };
-  using Nodes = std::map<PrimaryKey, MemberData<Node>>;
-  using Topics = std::map<PrimaryKey, MemberData<Topic>>;
+  using Nodes = DoubleLinkedList<Node>;
+  using Topics = DoubleLinkedList<Topic>;
 
 public:
   DataStore(
     const json::json &config
   );
 
-  const Member::Ptr getNode(
+  const MemberPtr getNode(
     const PrimaryKey &primary
   );
-  const Member::Ptr getNodeByName(
+  const MemberPtr getNodeByName(
     const std::string &name
   );
-  void removeNode(
+  const MemberPtr getTopic(
     const PrimaryKey &primary
   );
-  const Member::Ptr getTopic(
-    const PrimaryKey &primary
-  );
-  const Member::Ptr getTopicByName(
+  const MemberPtr getTopicByName(
     const std::string &name
   );
-  void removeTopic(
-    const PrimaryKey &primary
-  );
+  const MemberPtr get(
+    const MemberProxy &proxy
+  ) { return (proxy.mIsTopic ? getTopic(proxy.mPrimaryKey) : getNode(proxy.mPrimaryKey)); }
 
-  Graph getFullGraphView() const;
+  GraphView getFullGraphView() const;
   SharedMemory getCpuUtilisationMemory() const;
 
   void run(
@@ -71,12 +65,12 @@ public:
   );
 
 private:
-  Node *requestNode(
+  MemberPtr requestNode(
     const PrimaryKey &primary,
     bool updates
   );
 
-  Topic *requestTopic(
+  MemberPtr requestTopic(
     const PrimaryKey &primary,
     bool updates
   );

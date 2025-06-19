@@ -10,9 +10,8 @@ using namespace std::chrono_literals;
 #include <thread>
 
 
-//! NOTE: reenable parameter when moving from macros to config
 FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, DataStore::Ptr dataStorePtr):
-  mpWatchlist(watchlist),
+  mcpWatchlist(watchlist),
   mpDataStore(dataStorePtr),
   cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
   cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
@@ -30,37 +29,48 @@ void FaultDetection::run(const std::atomic<bool> &running)
     start = cr::system_clock::now();
 
     // retrieve all members currently on the watchlist
-    Members currentWatchlistMembers = mpWatchlist->getMembers();
+    Members currentWatchlistMembers = mcpWatchlist->getMembers();
     // add their attributes to the moving window
-    for (Member::Ptr member: currentWatchlistMembers)
+    for (MemberPtr &member: currentWatchlistMembers)
     {
-      LOG_TRACE("Updating moving attribute window for member " << LOG_MEMBER(member));
+      LOG_TRACE("Updating moving attribute window for member " << member);
       Member::AttributeMapping attributes = member->getAttributes();
 
       MemberWindow::iterator it = mMovingWindow.find(member);
       if (it == mMovingWindow.end())
-        mMovingWindow.emplace(member, createAttrWindow(attributes));
+        mMovingWindow.emplace(std::move(member), createAttrWindow(attributes));
       else
         updateAttrWindow(it->second, attributes);
     }
 
-    for (const auto &[memberPtr, attributeWindow]: mMovingWindow)
+    for (MemberWindow::iterator it = mMovingWindow.begin(); it != mMovingWindow.end();)
     {
+      const auto &[memberPtr, attributeWindow] = *it;
+
       // if there ain't enough attribute values, skip
       //! NOTE: the first attribute is selected as representing all, since all
       //!       attribute buffers for one member theoretically grow in parallel
       if (!attributeWindow.begin()->second.full())
+      {
+        ++it;
         continue;
-      mpWatchlist->notifyUsed(memberPtr);
+      }
 
+      // check if there is a fault
       Alert alert;
-      if (!detectFaults(memberPtr, attributeWindow, alert))
-        continue;
+      if (detectFaults(memberPtr, attributeWindow, alert))
+      {
+        LOG_DEBUG("Detected fault for member " << memberPtr);
+        const ScopeLock scopedLock(mAlertMutex);
+        mAlerts.push_back(std::move(alert));
+      }
 
-      LOG_DEBUG("Detected fault for member " << LOG_MEMBER(memberPtr));
-      mAlertMutex.lock();
-      mAlerts.push_back(alert);
-      mAlertMutex.unlock();
+      // if the member for which the detection was issued is a blindspot member
+      // remove it from watchlist and detection
+      if (mcpWatchlist->notifyUsed(memberPtr->mPrimaryKey))
+        it = mMovingWindow.erase(it);
+      else
+        ++it;
     }
 
     stop = cr::system_clock::now();
@@ -107,13 +117,13 @@ void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::Att
     window.at(descriptor).push(attributes);
 }
 
-bool FaultDetection::detectFaults(Member::Ptr member, const AttributeWindow &window, Alert &oAlert)
+bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &window, Alert &oAlert)
 {
   LOG_TRACE(LOG_VAR(member) LOG_VAR(&window) LOG_VAR(&oAlert));
 
   oAlert.timestamp = cr::system_clock::now();
   oAlert.severity = Alert::SEVERITY_NORMAL;
-  if (!member->cmIsTopic && !static_cast<Node *>(member)->mAlive)
+  if (!member->mIsTopic && !::asNode(member)->mAlive)
     return true;
 
   for (const auto &[descriptor, buffer]: window)

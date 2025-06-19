@@ -17,6 +17,7 @@ using namespace std::chrono_literals;
 #include <thread>
 #include <unistd.h>
 #include <cstring>
+#include <algorithm>
 
 
 DataStore::DataStore(const json::json &config):
@@ -25,40 +26,24 @@ DataStore::DataStore(const json::json &config):
   LOG_TRACE(LOG_THIS LOG_VAR(config));
 }
 
-const Member::Ptr DataStore::getNode(const PrimaryKey &primary)
+const MemberPtr DataStore::getNode(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  Nodes::iterator nodeIt = mNodes.find(primary);
-  if (nodeIt != mNodes.end())
-  {
-    ++(nodeIt->second.useCounter);
-    Node *node = &(nodeIt->second.instance);
-    LOG_TRACE("Returning existing node: " << LOG_MEMBER(node) " with new counter: " << nodeIt->second.useCounter);
-    return node;
-  }
+  Nodes::iterator it = mNodes.find(primary);
+  if (it != mNodes.end())
+    return MAKE_MEMBER_PTR(it);
 
   return requestNode(primary, true);
 }
 
-const Member::Ptr DataStore::getNodeByName(const std::string &name)
+const MemberPtr DataStore::getNodeByName(const std::string &name)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(name));
 
-  Nodes::iterator nodeIt = std::find_if(
-    mNodes.begin(), mNodes.end(),
-    [name](const Nodes::value_type &element) -> bool
-    {
-      return (element.second.instance.mName == name);
-    }
-  );
-  if (nodeIt != mNodes.end())
-  {
-    ++(nodeIt->second.useCounter);
-    Node *node = &(nodeIt->second.instance);
-    LOG_TRACE("Returning existing node: " << LOG_MEMBER(node) " with new counter: " << nodeIt->second.useCounter);
-    return node;
-  }
+  Nodes::iterator it = mNodes.findName(name);
+  if (it != mNodes.end())
+    return MAKE_MEMBER_PTR(it);
 
   requestId_t searchRequestId;
   SearchRequest req{
@@ -70,62 +55,64 @@ const Member::Ptr DataStore::getNodeByName(const std::string &name)
   PrimaryKey primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
   LOG_TRACE("SearchRequest returned primary key: '" << primaryKey << "'");
   if (primaryKey.empty())
-    return nullptr;
+    return MemberPtr();
   else
     return requestNode(primaryKey, true);
 }
 
-void DataStore::removeNode(const PrimaryKey &primary)
+MemberPtr DataStore::requestNode(const PrimaryKey &primary, bool updates)
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
 
-  const ScopeLock scopedLock(mNodesMutex);
-
-  Nodes::iterator nodeIt = mNodes.find(primary);
-  if (nodeIt != mNodes.end() && --(nodeIt->second.useCounter) == 0ul)
+  NodeRequest nodeRequest{
+    .updates = updates
+  };
+  util::parseString(nodeRequest.primaryKey, primary);
+  requestId_t requestId;
+  Nodes::iterator node;
   {
-    LOG_TRACE("Removing " << LOG_MEMBER((&(nodeIt->second.instance))) "from data store");
-    UnsubscribeRequest req{.id = nodeIt->second.requestId};
-    requestId_t unsubReqId;
-    mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
-    mNodes.erase(nodeIt);
+    const ScopeLock scopedLock(mTopicsMutex);
+
+    mIpcClient.sendNodeRequest(nodeRequest, requestId);
+    NodeResponse nodeResponse = mIpcClient.receiveNodeResponse().value();
+    node = mNodes.emplace_back(nodeResponse, requestId);
   }
+  LOG_TRACE("Created node " << node->instance);
+
+  SingleAttributesRequest req{
+    .attribute = AttributeName::CPU_UTILIZATION,
+    .direction = Direction::NONE,
+    .continuous = true
+  };
+  util::parseString(req.primaryKey, node->instance.mPrimaryKey);
+  mIpcClient.sendSingleAttributesRequest(req, requestId);
+  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
+  assert(requestId == response.requestID);
+
+  LOG_TRACE("Added CPU utilisation attribute to " << node->instance << " with shared memory location: " << response.memAddress);
+  node->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+
+  return MAKE_MEMBER_PTR(node);
 }
 
-const Member::Ptr DataStore::getTopic(const PrimaryKey &primary)
+const MemberPtr DataStore::getTopic(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  Topics::iterator topicIt = mTopics.find(primary);
-  if (topicIt != mTopics.end())
-  {
-    ++(topicIt->second.useCounter);
-    Topic *topic = &(topicIt->second.instance);
-    LOG_TRACE("Returning existing topic: " << LOG_MEMBER(topic) " with new counter: " << topicIt->second.useCounter);
-    return topic;
-  }
+  Topics::iterator it = mTopics.find(primary);
+  if (it != mTopics.end())
+    return MAKE_MEMBER_PTR(it);
 
   return requestTopic(primary, true);
 }
 
-const Member::Ptr DataStore::getTopicByName(const std::string &name)
+const MemberPtr DataStore::getTopicByName(const std::string &name)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(name));
 
-  Topics::iterator topicIt = std::find_if(
-    mTopics.begin(), mTopics.end(),
-    [name](const Topics::value_type &element) -> bool
-    {
-      return (element.second.instance.mName == name);
-    }
-  );
-  if (topicIt != mTopics.end())
-  {
-    ++(topicIt->second.useCounter);
-    Topic *topic = &(topicIt->second.instance);
-    LOG_TRACE("Returning existing topic: " << LOG_MEMBER(topic) " with new counter: " << topicIt->second.useCounter);
-    return topic;
-  }
+  Topics::iterator it = mTopics.findName(name);
+  if (it != mTopics.end())
+    return MAKE_MEMBER_PTR(it);
 
   requestId_t searchRequestId;
   SearchRequest req{
@@ -133,33 +120,51 @@ const Member::Ptr DataStore::getTopicByName(const std::string &name)
   };
   util::parseString(req.name, name);
   mIpcClient.sendSearchRequest(req, searchRequestId);
+
   PrimaryKey primaryKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
   LOG_TRACE("SearchRequest returned primary key: '" << primaryKey << "'");
-
   if (primaryKey.empty())
-    return nullptr;
+    return MemberPtr();
   else
     return requestTopic(primaryKey, true);
 }
 
-void DataStore::removeTopic(const PrimaryKey &primary)
+MemberPtr DataStore::requestTopic(const PrimaryKey &primary, bool updates)
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(primary));
+  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
 
-  const ScopeLock scopedLock(mTopicsMutex);
-
-  Topics::iterator topicIt = mTopics.find(primary);
-  if (topicIt != mTopics.end() && --(topicIt->second.useCounter) == 0ul)
+  TopicRequest topicRequest{
+    .updates = updates
+  };
+  util::parseString(topicRequest.primaryKey, primary);
+  requestId_t requestId;
+  Topics::iterator topic;
   {
-    LOG_TRACE("Removing " << LOG_MEMBER((&(topicIt->second.instance))) "from data store");
-    UnsubscribeRequest req{.id = topicIt->second.requestId};
-    requestId_t unsubReqId;
-    mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
-    mTopics.erase(topicIt);
+    const ScopeLock scopedLock(mTopicsMutex);
+
+    mIpcClient.sendTopicRequest(topicRequest, requestId);
+    TopicResponse topicResponse = mIpcClient.receiveTopicResponse().value();
+    topic = mTopics.emplace_back(topicResponse, requestId);
   }
+  LOG_TRACE("Created topic " << topic->instance);
+
+  SingleAttributesRequest req{
+    .attribute = AttributeName::CPU_UTILIZATION,
+    .direction = Direction::NONE,
+    .continuous = true
+  };
+  util::parseString(req.primaryKey, topic->instance.mPrimaryKey);
+  mIpcClient.sendSingleAttributesRequest(req, requestId);
+  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
+  assert(requestId == response.requestID);
+
+  LOG_TRACE("Added CPU utilisation attribute to " << topic->instance << " with shared memory location: " << response.memAddress);
+  topic->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+
+  return MAKE_MEMBER_PTR(topic);
 }
 
-Graph DataStore::getFullGraphView() const
+DataStore::GraphView DataStore::getFullGraphView() const
 {
   LOG_TRACE(LOG_THIS);
 
@@ -217,20 +222,21 @@ Graph DataStore::getFullGraphView() const
   assert(queryResponseData.is_object());
 
   // construct graph vertices
-  Graph output;
+  GraphView output;
   PrimaryKey primaryKey;
   for (const json::json &node: queryResponseData["active"])
   {
     primaryKey = node["primaryKey"].get<PrimaryKey>();
     LOG_TRACE("Adding Node to graph with " LOG_VAR(primaryKey));
-    output.addNode(primaryKey);
+    output.emplace_back(MemberProxy(primaryKey, true), MemberProxies());
   }
   for (const json::json &topic: queryResponseData["passive"])
   {
     primaryKey = topic["primaryKey"].get<PrimaryKey>();
     LOG_TRACE("Adding Topic to graph with " LOG_VAR(primaryKey));
-    output.addTopic(primaryKey);
+    output.emplace_back(MemberProxy(primaryKey, true), MemberProxies());
   }
+  // std::sort(output.begin(), output.end());
 
   // construct graph edges
   for (const json::json &sub: queryResponseData["sub"])
@@ -241,13 +247,16 @@ Graph DataStore::getFullGraphView() const
     std::string
       fromPrimaryKey = sub["from"]["primaryKey"],
       toPrimaryKey   = sub["to"]["primaryKey"];
-    LOG_TRACE("Adding sub connection from " << fromPrimaryKey << " to " << toPrimaryKey << "to graph");
-    Graph::Vertex &fromVertex = output.mVertices[fromPrimaryKey];
-    assert(fromVertex.type == Graph::Vertex::TYPE_TOPIC);
-    fromVertex.outgoing.push_back(toPrimaryKey);
-    Graph::Vertex &toVertex = output.mVertices[toPrimaryKey];
-    assert(toVertex.type == Graph::Vertex::TYPE_NODE);
-    toVertex.incoming.push_back(fromPrimaryKey);
+    GraphView::iterator it = std::find_if(
+      output.begin(), output.end(),
+      [&fromPrimaryKey](const GraphView::value_type &element) -> bool
+      {
+        return element.member.mPrimaryKey == fromPrimaryKey;
+      }
+    );
+    LOG_TRACE("Adding sub connection from " << it->member << " to " << toPrimaryKey << "to graph");
+    assert(it != output.end());
+    it->connections.emplace_back(std::move(toPrimaryKey), false);
   }
   for (const json::json &pub: queryResponseData["pub"])
   {
@@ -257,13 +266,16 @@ Graph DataStore::getFullGraphView() const
     std::string
       fromPrimaryKey = pub["from"]["primaryKey"],
       toPrimaryKey   = pub["to"]["primaryKey"];
-    LOG_TRACE("Adding pub connection from " << fromPrimaryKey << " to " << toPrimaryKey << "to graph");
-    Graph::Vertex &fromVertex = output.mVertices[fromPrimaryKey];
-    assert(fromVertex.type == Graph::Vertex::TYPE_NODE);
-    fromVertex.outgoing.push_back(toPrimaryKey);
-    Graph::Vertex &toVertex = output.mVertices[toPrimaryKey];
-    assert(toVertex.type == Graph::Vertex::TYPE_TOPIC);
-    toVertex.incoming.push_back(fromPrimaryKey);
+    GraphView::iterator it = std::find_if(
+      output.begin(), output.end(),
+      [&fromPrimaryKey](const GraphView::value_type &element) -> bool
+      {
+        return element.member.mPrimaryKey == fromPrimaryKey;
+      }
+    );
+    LOG_TRACE("Adding pub connection from " << it->member << " to " << toPrimaryKey << "to graph");
+    assert(it != output.end());
+    it->connections.emplace_back(std::move(toPrimaryKey), true);
   }
   for (const json::json &send: queryResponseData["send"])
   {
@@ -273,13 +285,16 @@ Graph DataStore::getFullGraphView() const
     std::string
       fromPrimaryKey = send["from"]["primaryKey"],
       toPrimaryKey   = send["to"]["primaryKey"];
-    LOG_TRACE("Adding send connection from " << fromPrimaryKey << " to " << toPrimaryKey << "to graph");
-    Graph::Vertex &fromVertex = output.mVertices[fromPrimaryKey];
-    assert(fromVertex.type == Graph::Vertex::TYPE_NODE);
-    fromVertex.outgoing.push_back(toPrimaryKey);
-    Graph::Vertex &toVertex = output.mVertices[toPrimaryKey];
-    assert(toVertex.type == Graph::Vertex::TYPE_NODE);
-    toVertex.incoming.push_back(fromPrimaryKey);
+    GraphView::iterator it = std::find_if(
+      output.begin(), output.end(),
+      [&fromPrimaryKey](const GraphView::value_type &element) -> bool
+      {
+        return element.member.mPrimaryKey == fromPrimaryKey;
+      }
+    );
+    LOG_TRACE("Adding send connection from " << it->member << " to " << toPrimaryKey << "to graph");
+    assert(it != output.end());
+    it->connections.emplace_back(std::move(toPrimaryKey), false);
   }
 
   return output;
@@ -323,215 +338,169 @@ void DataStore::run(const std::atomic<bool> &running)
 
   while (running.load())
   {
+    for (Nodes::iterator it = mNodes.begin(); it != mNodes.end();)
+    {
+      if (it->useCounter.nonZero())
+      {
+        ++it;
+        continue;
+      }
+
+      LOG_TRACE("Removing " << it->instance << "from data store");
+      UnsubscribeRequest req{.id = it->requestId};
+      requestId_t unsubReqId;
+
+      const ScopeLock scopedLock(mNodesMutex);
+      mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      it = mNodes.erase(it);
+    }
+    for (Topics::iterator it = mTopics.begin(); it != mTopics.end();)
+    {
+      if (it->useCounter.nonZero())
+      {
+        ++it;
+        continue;
+      }
+
+      LOG_TRACE("Removing " << it->instance << "from data store");
+      UnsubscribeRequest req{.id = it->requestId};
+      requestId_t unsubReqId;
+
+      const ScopeLock scopedLock(mTopicsMutex);
+      mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      it = mTopics.erase(it);
+    }
+
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);
     if (publishersToUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodePublishersToUpdate publishersToUpdateValue = publishersToUpdate.value();
-      LOG_TRACE("Got NodePublishersToUpdate");
       PrimaryKey primaryKey = util::parseString(publishersToUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(publishersToUpdateValue);
+      LOG_TRACE("Got NodePublishersToUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(publishersToUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<NodeSubscribersToUpdate> subscribersToUpdate = mIpcClient.receiveNodeSubscribersToUpdate(false);
     if (subscribersToUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeSubscribersToUpdate subscribersToUpdateValue = subscribersToUpdate.value();
-      LOG_TRACE("Got NodeSubscribersToUpdate");
       PrimaryKey primaryKey = util::parseString(subscribersToUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(subscribersToUpdateValue);
+      LOG_TRACE("Got NodeSubscribersToUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(subscribersToUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<NodeIsServerForUpdate> isServerForUpdate = mIpcClient.receiveNodeIsServerForUpdate(false);
     if (isServerForUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeIsServerForUpdate isServerForUpdateValue = isServerForUpdate.value();
-      LOG_TRACE("Got NodeIsServerForUpdate");
       PrimaryKey primaryKey = util::parseString(isServerForUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(isServerForUpdateValue);
+      LOG_TRACE("Got NodeIsServerForUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(isServerForUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<NodeIsClientOfUpdate> isClientOfUpdate = mIpcClient.receiveNodeIsClientOfUpdate(false);
     if (isClientOfUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeIsClientOfUpdate isClientOfUpdateValue = isClientOfUpdate.value();
-      LOG_TRACE("Got NodeIsClientOfUpdate");
       PrimaryKey primaryKey = util::parseString(isClientOfUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(isClientOfUpdateValue);
+      LOG_TRACE("Got NodeIsClientOfUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(isClientOfUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<NodeIsActionServerForUpdate> isActionServerForUpdate = mIpcClient.receiveNodeIsActionServerForUpdate(false);
     if (isActionServerForUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionServerForUpdate isActionServerForUpdateValue = isActionServerForUpdate.value();
-      LOG_TRACE("Got NodeIsActionServerForUpdate");
       PrimaryKey primaryKey = util::parseString(isActionServerForUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(isActionServerForUpdateValue);
+      LOG_TRACE("Got NodeIsActionServerForUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(isActionServerForUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<NodeIsActionClientOfUpdate> isActionClientOfUpdate = mIpcClient.receiveNodeIsActionClientOfUpdate(false);
     if (isActionClientOfUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeIsActionClientOfUpdate isActionClientOfUpdateValue = isActionClientOfUpdate.value();
-      LOG_TRACE("Got NodeIsActionClientOfUpdate");
       PrimaryKey primaryKey = util::parseString(isActionClientOfUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(isActionClientOfUpdateValue);
+      LOG_TRACE("Got NodeIsActionClientOfUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(isActionClientOfUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
-    //! NOTE: not currently regarded
-    // std::optional<NodeTimerToUpdate> timerToUpdate = mIpcClient.receiveNodeTimerToUpdate(false);
-    // if (timerToUpdate.has_value())
-    // {
-    //   const ScopeLock scopedLock(mNodesMutex);
-    //   NodeTimerToUpdate timerToUpdateValue = timerToUpdate.value();
-    //   LOG_TRACE("Got NodeTimerToUpdate");
-    //   PrimaryKey primaryKey = at(util::parseString(timerToUpdateValue.;
-    //   while (!mNodes.contains(primaryKey))
-    //     std::this_thread::sleep_for(100ms);
-    //   mNodes.primaryKeyprimaryKey)).instance.update(timerToUpdateValue);
-    // }
+    //! NOTE: NodeTimerToUpdate not currently regarded
     std::optional<NodeStateUpdate> stateUpdate = mIpcClient.receiveNodeStateUpdate(false);
     if (stateUpdate.has_value())
     {
-      const ScopeLock scopedLock(mNodesMutex);
       NodeStateUpdate stateUpdateValue = stateUpdate.value();
-      LOG_TRACE("Got NodeStateUpdate");
       PrimaryKey primaryKey = util::parseString(stateUpdateValue.primaryKey);
-      while (!mNodes.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mNodes.at(primaryKey).instance.update(stateUpdateValue);
+      LOG_TRACE("Got NodeStateUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mNodesMutex);
+      Nodes::iterator it = mNodes.find(primaryKey);
+      if (it != mNodes.end())
+        it->instance.update(stateUpdateValue);
+      else
+        LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<TopicPublishersUpdate> publishersUpdate = mIpcClient.receiveTopicPublishersUpdate(false);
     if (publishersUpdate.has_value())
     {
-      const ScopeLock scopedLock(mTopicsMutex);
       TopicPublishersUpdate publishersUpdateValue = publishersUpdate.value();
-      LOG_TRACE("Got TopicPublishersUpdate");
       PrimaryKey primaryKey = util::parseString(publishersUpdateValue.primaryKey);
-      while (!mTopics.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mTopics.at(primaryKey).instance.update(publishersUpdateValue);
+      LOG_TRACE("Got TopicPublishersUpdate for " LOG_VAR(primaryKey));
+
+      {}
+
+      const ScopeLock scopedLock(mTopicsMutex);
+      Topics::iterator it = mTopics.find(primaryKey);
+      if (it != mTopics.end())
+        it->instance.update(publishersUpdateValue);
+      else
+        LOG_ERROR("No topic with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     std::optional<TopicSubscribersUpdate> subscribersUpdate = mIpcClient.receiveTopicSubscribersUpdate(false);
     if (subscribersUpdate.has_value())
     {
-      const ScopeLock scopedLock(mTopicsMutex);
       TopicSubscribersUpdate subscribersUpdateValue = subscribersUpdate.value();
-      LOG_TRACE("Got TopicSubscribersUpdate");
       PrimaryKey primaryKey = util::parseString(subscribersUpdateValue.primaryKey);
-      while (!mTopics.contains(primaryKey))
-        std::this_thread::sleep_for(100ms);
-      mTopics.at(primaryKey).instance.update(subscribersUpdateValue);
+      LOG_TRACE("Got TopicSubscribersUpdate for " LOG_VAR(primaryKey));
+
+      const ScopeLock scopedLock(mTopicsMutex);
+      Topics::iterator it = mTopics.find(primaryKey);
+      if (it != mTopics.end())
+        it->instance.update(subscribersUpdateValue);
+      else
+        LOG_ERROR("No topic with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
   }
-}
-
-Node *DataStore::requestNode(const PrimaryKey &primary, bool updates)
-{
-  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
-
-  NodeRequest nodeRequest{
-    .updates = updates
-  };
-  util::parseString(nodeRequest.primaryKey, primary);
-  requestId_t requestId;
-  mIpcClient.sendNodeRequest(nodeRequest, requestId);
-  NodeResponse nodeResponse = mIpcClient.receiveNodeResponse().value();
-
-  Node *node;
-  {
-    const ScopeLock scopedLock(mTopicsMutex);
-
-    auto [it, emplaced] = mNodes.emplace(
-      primary,
-      MemberData<Node>{
-        .instance = Node(nodeResponse),
-        .requestId = requestId,
-        .useCounter = 1ul
-      }
-    );
-    assert(emplaced);
-    //! NOTE: Taking a pointer to this iterator while mutex is locked, as other requestNode calls may invalidate it
-    node = &(it->second.instance);
-  }
-  LOG_TRACE("Created node " << LOG_MEMBER((node)));
-
-  SingleAttributesRequest req{
-    .attribute = AttributeName::CPU_UTILIZATION,
-    .direction = Direction::NONE,
-    .continuous = true
-  };
-  util::parseString(req.primaryKey, node->mPrimaryKey);
-  mIpcClient.sendSingleAttributesRequest(req, requestId);
-  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
-  assert(requestId == response.requestID);
-
-  LOG_TRACE("Added CPU utilisation attribute to " << LOG_MEMBER((node)) " with shared memory location: " << response.memAddress);
-  node->addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
-  return node;
-}
-
-Topic *DataStore::requestTopic(const PrimaryKey &primary, bool updates)
-{
-  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(updates));
-
-  TopicRequest topicRequest{
-    .updates = updates
-  };
-  util::parseString(topicRequest.primaryKey, primary);
-  requestId_t requestId;
-  mIpcClient.sendTopicRequest(topicRequest, requestId);
-  TopicResponse topicResponse = mIpcClient.receiveTopicResponse().value();
-
-  Topic *topic;
-  {
-    const ScopeLock scopedLock(mTopicsMutex);
-
-    auto [it, emplaced] = mTopics.emplace(
-      primary,
-      MemberData<Topic>{
-        .instance = Topic(topicResponse),
-        .requestId = requestId,
-        .useCounter = 1ul
-      }
-    );
-    assert(emplaced);
-    //! NOTE: Taking a pointer to this iterator while mutex is locked, as other requestTopic calls may invalidate it
-    topic = &(it->second.instance);
-  }
-
-  LOG_TRACE("Created topic " << LOG_MEMBER((topic)));
-  SingleAttributesResponse response;
-  std::string attributeName;
-  for (const Topic::Edges::value_type &edge: topic->mPublishers)
-  {
-    SingleAttributesRequest req{
-      .attribute = AttributeName::PUBLISHINGRATES,
-      .direction = Direction::NONE,
-      .continuous = true
-    };
-    util::parseString(req.primaryKey, edge.self);
-    mIpcClient.sendSingleAttributesRequest(req, requestId);
-    response = mIpcClient.receiveSingleAttributesResponse().value();
-    assert(requestId == response.requestID);
-    attributeName = std::to_string(AttributeName::PUBLISHINGRATES) + ": " + edge.self;
-
-    LOG_TRACE("Added attribute " << attributeName << " to " << LOG_MEMBER((topic)) " with shared memory location: " << response.memAddress);
-    topic->addAttributeSource(attributeName, response);
-  }
-
-  return topic;
 }
 
 IpcClient DataStore::tryMakeIpcClient(const json::json &config)

@@ -20,7 +20,7 @@ public:
   };
 
 private:
-  using InternalMembers = std::map<Member::Ptr, WatchlistMemberType>;
+  using InternalMembers = std::map<MemberPtr, WatchlistMemberType>;
 
 public:
   Watchlist(
@@ -28,15 +28,40 @@ public:
     DataStore::Ptr dataStorePtr
   );
 
-  void addMember(Member::Ptr member, WatchlistMemberType type = TYPE_NORMAL);
-  void removeMember(Member::Ptr member);
-  Members getMembers();
+  void addMember(
+    const MemberProxy &member,
+    WatchlistMemberType type = TYPE_NORMAL
+  );
+  void addMember(
+    MemberPtr member,
+    WatchlistMemberType type = TYPE_NORMAL
+  );
+
+  bool contains(
+    const PrimaryKey &member
+  );
   void reset();
-  void notifyUsed(Member::Ptr member);
+
+  Members getMembers();
+  bool notifyUsed(
+    const PrimaryKey &member
+  );
 
 private:
   void tryInitialise();
-  InternalMembers::iterator removeMember(InternalMembers::iterator elementIt);
+
+  InternalMembers::iterator get(
+    const PrimaryKey &member
+  )
+  {
+    return std::find_if(
+      mMembers.begin(), mMembers.end(),
+      [&member](const InternalMembers::value_type &element) -> bool
+      {
+        return element.first->mPrimaryKey == member;
+      }
+    );
+  }
 
 private:
   std::vector<std::string> mInitialMemberNames;
