@@ -15,7 +15,7 @@ namespace cr = std::chrono;
 #include <source_location>
 #include <filesystem>
 namespace fs = std::filesystem;
-#include <thread>
+#include <mutex>
 
 
 #define CONFIG_IPC                              "ipc"
@@ -102,37 +102,36 @@ namespace fs = std::filesystem;
 
 #define LOG_THIS "(this = " << this << ") "
 #define LOG_VAR(var) #var ": " << var << " "
-#define LOG_MEMBER(memberPtr) (memberPtr->cmIsTopic ? "Topic" : "Node") << "('" << memberPtr->mPrimaryKey << "'@" << memberPtr << ")"
 
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
 #define LOG_TRACE(msg)  _LOG("[TRACE]", "\033[0;36m", msg)
 #else
-#define LOG_TRACE(msg)
+#define LOG_TRACE(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_TRACE
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
 #define LOG_DEBUG(msg)  _LOG("[DEBUG]", "\033[0;94m", msg)
 #else
-#define LOG_DEBUG(msg)
+#define LOG_DEBUG(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_DEBUG
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
 #define LOG_INFO(msg)   _LOG("[INFO] ", "\033[0;92m", msg)
 #else
-#define LOG_INFO(msg)
+#define LOG_INFO(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_INFO
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
 #define LOG_WARN(msg)   _LOG("[WARN] ", "\033[0;93m", msg)
 #else
-#define LOG_WARN(msg)
+#define LOG_WARN(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_WARN
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
 #define LOG_ERROR(msg)  _LOG("[ERROR]", "\033[0;91m", msg)
 #else
-#define LOG_ERROR(msg)
+#define LOG_ERROR(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_ERROR
 #if FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
 #define LOG_FATAL(msg)  _LOG("[FATAL]", "\033[0;95m", msg)
 #else
-#define LOG_FATAL(msg)
+#define LOG_FATAL(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
 
 

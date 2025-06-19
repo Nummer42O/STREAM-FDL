@@ -18,12 +18,12 @@ namespace cr = std::chrono;
 
 struct Alert
 {
-  Member::Ptr member;
+  MemberPtr member;
   std::vector<Member::AttributeDescriptor> affectedAttributes;
   Timestamp timestamp;
   enum Severity {
     SEVERITY_NORMAL //! TODO
-  } severity;
+  } severity = SEVERITY_NORMAL;
 };
 
 
@@ -36,7 +36,7 @@ public:
 
 private:
   using AttributeWindow = std::map<Member::AttributeDescriptor, CircularBuffer>;
-  using MemberWindow = std::map<Member::Ptr, AttributeWindow>;
+  using MemberWindow = std::map<MemberPtr, AttributeWindow>;
 
 public:
   /**
@@ -55,6 +55,10 @@ public:
   );
 
   Alerts getEmittedAlerts();
+  void reset()
+  {
+    mMovingWindow.clear();
+  }
 
 private:
   AttributeWindow createAttrWindow(
@@ -65,13 +69,13 @@ private:
     const Member::AttributeMapping &attributeMapping
   );
   static bool detectFaults(
-    Member::Ptr member,
+    MemberPtr member,
     const AttributeWindow &window,
     Alert &oAlert
   );
 
 private:
-  Watchlist *const mpWatchlist;
+  Watchlist *const mcpWatchlist;
   Alerts mAlerts;
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;

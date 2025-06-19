@@ -44,17 +44,20 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
     Alerts emittedAlerts = mFD.getEmittedAlerts();
     LOG_DEBUG("Got " << emittedAlerts.size() << " alerts.");
-    expandSubgraph(emittedAlerts);
+    if (!emittedAlerts.empty())
+      expandSubgraph(emittedAlerts);
     if (checkAbortCirteria(emittedAlerts))
     {
       LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
       mWatchlist.reset();
+      mFD.reset();
       mSAG.reset();
 
-      Alerts lastDitchAlerts = mFD.getEmittedAlerts();
-      std::move(lastDitchAlerts.begin(), lastDitchAlerts.end(), std::back_inserter(emittedAlerts));
+      // get the last alerts that might have sprung up before the reset
+      Alerts lastAlerts = mFD.getEmittedAlerts();
+      std::move(lastAlerts.begin(), lastAlerts.end(), std::back_inserter(emittedAlerts));
     }
 
     //! TODO: std::move emittedAlerts into FTE-Alert-DB
@@ -66,53 +69,93 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
   visualisation.join();
 }
 
+static void getBlindspotsInternal(
+  DataStore::GraphView &&graph,
+  DataStore::MemberConnections &&currentMember,
+  MemberProxies currentPath,
+  MemberProxies &oBlindSpots
+)
+{
+  LOG_TRACE(LOG_VAR(&graph) << currentMember.member << LOG_VAR(currentPath) LOG_VAR(oBlindSpots));
+
+  // get outgoing edges (and their count) for currently observed vertex
+  size_t nrOutgoingEdges = currentMember.connections.size();
+
+  // if there are no more outgoing edges or the only outgoing edge is already in the path,
+  // i.e. the path loops, the current node should be monitored as a potential blind spot
+  // otherwise continue traversing the path
+  if (nrOutgoingEdges == 0ul ||
+      (nrOutgoingEdges == 1ul &&
+       std::find(currentPath.begin(), currentPath.end(), currentMember.connections.front()) != currentPath.end()))
+  {
+    LOG_TRACE(currentMember.member << " is blindspot")
+    oBlindSpots.push_back(currentMember.member);
+    return;
+  }
+  else
+    currentPath.push_back(currentMember.member);
+
+  // if there are outgoing edges, investigate all vertices they lead to
+  for (const MemberProxy &outgoingEdgeTo: currentMember.connections)
+  {
+    // if the vertex has been visited already, ignore it
+    DataStore::GraphView::iterator it = std::find_if(
+      graph.begin(), graph.end(),
+      [&outgoingEdgeTo](const DataStore::GraphView::value_type &member) -> bool
+      {
+        return member.member == outgoingEdgeTo;
+      }
+    );
+    if (it == graph.end())
+      continue;
+
+    // if the vertex has not been visited, mark it as such and investigate it
+    DataStore::MemberConnections vertex = std::move(*it);
+    graph.erase(it);
+    getBlindspotsInternal(std::move(graph), std::move(vertex), currentPath, oBlindSpots);
+  }
+}
+
+static MemberProxies getBlindspots(
+  DataStore::GraphView &&graph
+)
+{
+  LOG_TRACE(LOG_VAR(&graph));
+
+  MemberProxies blindspots;
+  // visited vertices get removed, so initiate searches until there are no more unchecked vertices
+  while (!graph.empty())
+  {
+    DataStore::MemberConnections vertex = std::move(graph.back());
+    graph.pop_back();
+    LOG_TRACE("Starting new trace path from " << vertex.member);
+    getBlindspotsInternal(std::move(graph), std::move(vertex), {}, blindspots);
+  }
+
+  return blindspots;
+}
+
 void DynamicSubgraphBuilder::blindSpotCheck()
 {
   LOG_TRACE(LOG_THIS);
 
-  Graph fullGraph = mpDataStore->getFullGraphView();
-  MemberIds potentialBlindSpots = ::getBlindspots(fullGraph);
-  LOG_DEBUG(LOG_VAR(potentialBlindSpots));
-  Members watchlistMembers = mWatchlist.getMembers();
+  DataStore::GraphView fullGraph = mpDataStore->getFullGraphView();
+  MemberProxies potentialBlindSpots = ::getBlindspots(std::move(fullGraph));
+  // LOG_DEBUG(LOG_VAR(potentialBlindSpots));
 
-  for (const PrimaryKey &member: potentialBlindSpots)
-  {
-    Members::const_iterator it = std::find_if(
-      watchlistMembers.begin(), watchlistMembers.end(),
-      [member](const Members::value_type &element)
-      {
-        return element->mPrimaryKey == member;
-      }
-    );
-    if (it != watchlistMembers.end())
-      continue;
-
-    LOG_TRACE("Adding blindspot member " LOG_VAR(member) " to watchlist");
-    if (fullGraph.get(member)->type == Graph::Vertex::TYPE_NODE)
-      mWatchlist.addMember(mpDataStore->getNode(member), Watchlist::TYPE_BLINDSPOT);
-    else
-      mWatchlist.addMember(mpDataStore->getTopic(member), Watchlist::TYPE_BLINDSPOT);
-  }
+  for (const MemberProxy &member: potentialBlindSpots)
+    mWatchlist.addMember(member, Watchlist::TYPE_BLINDSPOT);
 }
 
 void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
 {
   LOG_TRACE(LOG_THIS);
 
-  //! TODO: This is not quite as the thesis describes…
-  //!       I think I need to write new Topics/Nodes to a seperate buffer and evaluate it here.
   for (const Alert &alert: newAlerts)
   {
-    auto vertex = mSAG.add(alert.member);
-    if (vertex)
-    {
-      for (const PrimaryKey &primary: vertex->incoming)
-        mWatchlist.addMember(
-          vertex->type == Graph::Vertex::TYPE_NODE ?
-          mpDataStore->getNode(primary) :
-          mpDataStore->getTopic(primary)
-        );
-    }
+    if (mSAG.add(alert.member))
+      for (const MemberProxy &incomingMember: mSAG.getIncoming(alert.member))
+        mWatchlist.addMember(incomingMember);
   }
   mSAG.updateVisualisation();
 }

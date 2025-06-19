@@ -1,8 +1,11 @@
 #pragma once
 
+#include "dynamic-subgraph/member-base.hpp"
+
 #include "ipc/datastructs/information-datastructs.hpp"
 #include "ipc/datastructs/sharedMem-datastructs.hpp"
 #include "ipc/sharedMem.hpp"
+#include "ipc/common.hpp"
 #include "ipc/util.hpp"
 #include "common.hpp"
 
@@ -15,88 +18,37 @@ namespace cr = std::chrono;
 #include <map>
 
 
-//! TODO: are those forward declarations still necessary?
-class Node;
-class Topic;
-
-
-class Member
-{
-friend class DataStore;
-friend class Graph;
-
-public:
-  using AttributeDescriptor = std::string;
-  using AttributeMapping = std::map<AttributeDescriptor, double>;
-  using SharedMemory = sharedMem::SHMChannel<sharedMem::Response>;
-
-  using Ptr = Member *;
-
-protected:
-  struct Attribute
-  {
-    AttributeDescriptor name;
-    SharedMemory sharedMemory;
-    requestId_t requestId;
-    double lastValue;
-  };
-  using Attributes = std::vector<Attribute>;
-
-protected:
-  Member(
-    bool isTopic,
-    PrimaryKey primaryKey
-  ):
-    cmIsTopic(isTopic),
-    mPrimaryKey(primaryKey)
-  {}
-
-public:
-  AttributeMapping getAttributes();
-  void addAttributeSource(
-    const AttributeDescriptor &attributeName,
-    const SingleAttributesResponse &response
-  );
-
-public:
-  const bool cmIsTopic;
-
-  PrimaryKey  mPrimaryKey;
-  Attributes  mAttributes;
-};
-using Members = std::vector<Member::Ptr>;
-using MemberIds = std::vector<PrimaryKey>;
-
-
 class Node: public Member
 {
 friend class DataStore;
 friend class Graph;
+template<typename T>
+friend class _Element;
 
 public:
-  using ServiceMapping = std::map<std::string, PrimaryKey>;
-  using Clients = MemberIds;
+  using ServiceMapping = std::map<std::string, MemberProxy>;
+  using Clients = MemberProxies;
   using ClientMapping = std::map<std::string, Clients>;
 
 public:
   void update(
     const NodePublishersToUpdate &update
-  ) { mPublishesTo.push_back(update.publishesTo); }
+  ) { mPublishesTo.emplace_back(update.publishesTo, true); }
   void update(
     const NodeSubscribersToUpdate &update
-  ) { mSubscribesTo.push_back(update.subscribesTo); }
+  ) { mSubscribesTo.emplace_back(update.subscribesTo, true); }
   void update(
     const NodeIsServerForUpdate &update
   );
   void update(
     const NodeIsClientOfUpdate &update
-  ) { mServers.emplace(util::parseString(update.srvName), update.serverNodeId); }
+  ) { mServers.emplace(util::parseString(update.srvName), MemberProxy(update.serverNodeId, false)); }
   void update(
     const NodeIsActionServerForUpdate &update
   );
   void update(
     const NodeIsActionClientOfUpdate &update
-  ) { mServers.emplace(util::parseString(update.srvName), update.actionserverNodeId); }
+  ) { mActionServers.emplace(util::parseString(update.srvName), MemberProxy(update.actionserverNodeId, false)); }
   void update(
     const NodeStateUpdate &update
   );
@@ -110,7 +62,7 @@ public:
   std::string     mName;
   std::string     mPkgName;
   bool            mAlive;
-  Timestamp     mAliveChangeTime;
+  Timestamp       mAliveChangeTime;
   uint32_t        mBootCount;
   pid_t           mProcessId;
 
@@ -119,7 +71,7 @@ private:
                   mActionClients; // Node provides services for actions with those clients
   ServiceMapping  mServers, // Node listens to other services with those servers
                   mActionServers; // Node listens to other services for actions with those servers
-  MemberIds       mPublishesTo,
+  MemberProxies   mPublishesTo,
                   mSubscribesTo;
 };
 
@@ -128,28 +80,39 @@ class Topic: public Member
 {
 friend class DataStore;
 friend class Graph;
+template<typename T>
+friend class _Element;
 
 public:
   struct CommunicationEdge
   {
-    PrimaryKey node, self;
+    CommunicationEdge(
+      PrimaryKey edge,
+      PrimaryKey node
+    ):
+      primaryKey(edge),
+      associatedNode{node, false}
+    {}
+
+    PrimaryKey primaryKey;
+    MemberProxy associatedNode;
   };
   using Edges = std::vector<CommunicationEdge>;
 
 public:
   void update(
     const TopicPublishersUpdate &update
-  ) { mPublishers.push_back({update.publisher, update.edge}); }
+  ) { mPublishers.emplace_back(update.edge, update.publisher); }
   void update(
     const TopicSubscribersUpdate &update
-  ) { mSubscribers.push_back({update.subscriber, update.edge}); }
+  ) { mSubscribers.emplace_back(update.edge, update.subscriber); }
 
 private:
   Topic(
     const TopicResponse &response
   );
 
-private:
+public:
   std::string     mName;
   std::string     mType;
 

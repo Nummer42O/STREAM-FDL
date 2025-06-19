@@ -16,31 +16,29 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
   config.get_to(mInitialMemberNames);
 }
 
-void Watchlist::addMember(Member::Ptr member, WatchlistMemberType type)
+void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 {
-  assert(member != nullptr);
-  LOG_TRACE(LOG_THIS LOG_VAR(member) "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+  LOG_TRACE(LOG_THIS << member << "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
 
   const ScopeLock scopeLock(mMembersMutex);
 
-  InternalMembers::iterator it = mMembers.find(member);
+  InternalMembers::iterator it = std::find_if(
+    mMembers.begin(), mMembers.end(),
+    [&member](const InternalMembers::value_type &internalMember) -> bool
+    {
+      return internalMember.first->mPrimaryKey == member.mPrimaryKey;
+    }
+  );
   if (it == mMembers.end())
     return;
 
-  mMembers.insert({member, type});
-}
+  LOG_TRACE("Adding member " << member << " to watchlist");
+  MemberPtr memberPtr = mpDataStore->get(member);
+  assert(memberPtr.valid());
 
-void Watchlist::removeMember(Member::Ptr member)
-{
-  LOG_TRACE(LOG_THIS LOG_VAR(member));
-
-  const ScopeLock scopeLock(mMembersMutex);
-
-  InternalMembers::iterator it = mMembers.find(member);
-  if (it == mMembers.end())
-    return;
-
-  removeMember(it);
+  bool emplaced;
+  std::tie(it, emplaced) = mMembers.emplace(std::move(memberPtr), type);
+  assert(emplaced);
 }
 
 Members Watchlist::getMembers()
@@ -65,35 +63,34 @@ Members Watchlist::getMembers()
   return output;
 }
 
+bool Watchlist::contains(const PrimaryKey &member)
+{
+  LOG_TRACE(LOG_THIS);
+  const ScopeLock scopeLock(mMembersMutex);
+
+  return this->get(member) != mMembers.end();
+}
+
 void Watchlist::reset()
 {
   LOG_TRACE(LOG_THIS);
-
   const ScopeLock scopeLock(mMembersMutex);
 
-  for (InternalMembers::iterator it = mMembers.begin(); it != mMembers.end();)
-  {
-    if (it->second != TYPE_NORMAL)
-      ++it;
-
-    it = removeMember(it);
-  }
+  mMembers.clear();
 }
 
-void Watchlist::notifyUsed(Member::Ptr member)
+bool Watchlist::notifyUsed(const PrimaryKey &member)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member));
+  const ScopeLock scopedLock(mMembersMutex);
 
-  InternalMembers::iterator memberIt = mMembers.find(member);
-  if (memberIt == mMembers.end() ||
-      memberIt->second != TYPE_BLINDSPOT)
-    return;
+  InternalMembers::iterator it = this->get(member);
+  if (it == mMembers.end() ||
+      it->second != TYPE_BLINDSPOT)
+    return false;
 
-  {
-    const ScopeLock scopedLock(mMembersMutex);
-
-    removeMember(memberIt);
-  }
+  mMembers.erase(it);
+  return true;
 }
 
 void Watchlist::tryInitialise()
@@ -103,28 +100,13 @@ void Watchlist::tryInitialise()
   if (mInitialMemberNames.empty())
     return;
 
-  std::remove_if(
-    mInitialMemberNames.begin(), mInitialMemberNames.end(),
-    [&](const std::string &name) -> bool
-    {
-      const Member::Ptr node = mpDataStore->getNodeByName(name);
-      if (!node)
-        return false;
+  for (auto it = mInitialMemberNames.begin(); it != mInitialMemberNames.end();)
+  {
+    MemberPtr node = mpDataStore->getNodeByName(*it);
+    if (!node.valid())
+      ++it;
 
-      mMembers.emplace(node, TYPE_INITIAL);
-      return true;
-    }
-  );
-}
-
-Watchlist::InternalMembers::iterator Watchlist::removeMember(InternalMembers::iterator elementIt)
-{
-  LOG_TRACE(LOG_THIS "element: " << elementIt->first << " (" << (elementIt->second == TYPE_NORMAL ? "normal" : ( elementIt->second == TYPE_INITIAL ? "initial" : "blindspot")) << ')');
-
-  if (elementIt->first->cmIsTopic)
-    mpDataStore->removeTopic(elementIt->first->mPrimaryKey);
-  else
-    mpDataStore->removeNode(elementIt->first->mPrimaryKey);
-
-  return mMembers.erase(elementIt);
+    mMembers.emplace(std::move(node), TYPE_INITIAL);
+    it = mInitialMemberNames.erase(it);
+  }
 }

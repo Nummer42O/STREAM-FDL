@@ -25,82 +25,36 @@ Graph::Graph(const Graph &other):
   LOG_TRACE(LOG_THIS LOG_VAR(&other));
 }
 
-const Graph::Vertex *Graph::add(Member::Ptr member)
+bool Graph::add(const MemberPtr &member)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member));
 
-  Vertices::iterator it = mVertices.find(member->mPrimaryKey);
+  const ScopeLock scopedLock(mVerticesMutex);
+
+  Members::iterator it = std::find_if(
+    mVertices.begin(), mVertices.end(),
+    [&member](const Members::value_type &existingMember)
+    {
+      return existingMember == member;
+    }
+  );
   if (it != mVertices.end())
-    return nullptr;
+    return false;
 
-  LOG_DEBUG(LOG_THIS LOG_VAR(member->cmIsTopic))
-  Vertex vertex;
-  if (member->cmIsTopic)
-  {
-    auto topic = static_cast<const Topic *>(member);
-
-    vertex.type = Vertex::TYPE_NODE;
-    std::transform(
-      topic->mPublishers.begin(), topic->mPublishers.end(),
-      std::back_inserter(vertex.incoming),
-      [](const Topic::Edges::value_type &edge) -> MemberIds::value_type
-      {
-        return edge.node;
-      }
-    );
-    std::transform(
-      topic->mSubscribers.begin(), topic->mSubscribers.end(),
-      std::back_inserter(vertex.outgoing),
-      [](const Topic::Edges::value_type &edge) -> MemberIds::value_type
-      {
-        return edge.node;
-      }
-    );
-  }
-  else
-  {
-    auto node = static_cast<const Node *>(member);
-    vertex.type = Vertex::TYPE_NODE;
-
-    std::transform(
-      node->mServers.begin(), node->mServers.end(),
-      std::back_inserter(vertex.incoming),
-      [](const Node::ServiceMapping::value_type &entry) -> MemberIds::value_type
-      {
-        return entry.second;
-      }
-    );
-    std::transform(
-      node->mActionServers.begin(), node->mActionServers.end(),
-      std::back_inserter(vertex.incoming),
-      [](const Node::ServiceMapping::value_type &entry) -> MemberIds::value_type
-      {
-        return entry.second;
-      }
-    );
-    std::copy(node->mSubscribesTo.begin(), node->mSubscribesTo.end(), std::back_inserter(vertex.incoming));
-
-    for (const Node::ClientMapping::value_type &service: node->mClients)
-      std::copy(service.second.begin(), service.second.end(), std::back_inserter(vertex.outgoing));
-    for (const Node::ClientMapping::value_type &service: node->mActionClients)
-      std::copy(service.second.begin(), service.second.end(), std::back_inserter(vertex.outgoing));
-    std::copy(node->mPublishesTo.begin(), node->mPublishesTo.end(), std::back_inserter(vertex.outgoing));
-  }
-
-  auto [emplacedIt, isEmplaced] = mVertices.emplace(member->mPrimaryKey, std::move(vertex));
-  assert(isEmplaced);
-  return &(emplacedIt->second);
+  mVertices.push_back(member);
+  return true;
 }
 
-const Graph::Vertex *Graph::get(const PrimaryKey &primary) const
+bool Graph::contains(const MemberProxy &member) const
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(primary));
-
-  Vertices::const_iterator it = mVertices.find(primary);
-  if (it != mVertices.end())
-    return &(it->second);
-
-  return nullptr;
+  Members::const_iterator it = std::find_if(
+    mVertices.begin(), mVertices.end(),
+    [&member](const Members::value_type &existingMember)
+    {
+      return existingMember->mPrimaryKey == member.mPrimaryKey;
+    }
+  );
+  return it != mVertices.end();
 }
 
 void Graph::visualise(const std::atomic<bool> &running)
@@ -114,18 +68,19 @@ void Graph::visualise(const std::atomic<bool> &running)
     {
       LOG_DEBUG("updating visualisation")
 
+      GVC_t *gvc = gvContext();
       Agraph_t *graph = agopen(const_cast<char *>("g"), Agdirected, NULL);
       {
-        const ScopeLock scopedLock(mVisualisationMutex);
+        const ScopeLock scopedLock(mVerticesMutex);
 
         char cPrimaryKey[37];
-        for (const auto &[key, vertex]: mVertices)
+        for (const MemberPtr &vertex: mVertices)
         {
-          std::strcpy(cPrimaryKey, key.c_str());
+          std::strcpy(cPrimaryKey, vertex->mPrimaryKey.c_str());
           Agnode_t *fromNode = agnode(graph, cPrimaryKey, 1);
-          for (const PrimaryKey &to: vertex.outgoing)
+          for (const MemberProxy &to: this->getOutgoing(vertex))
           {
-            std::strcpy(cPrimaryKey, to.c_str());
+            std::strcpy(cPrimaryKey, to.mPrimaryKey.c_str());
             Agnode_t *toNode = agnode(graph, cPrimaryKey, 1);
             agedge(graph, fromNode, toNode, NULL, 1);
           }
@@ -135,7 +90,9 @@ void Graph::visualise(const std::atomic<bool> &running)
 
       std::FILE *graphFile = std::fopen("/tmp/render.png", "wb+");
       assert(graphFile);
-      agwrite(graph, graphFile);
+      gvLayout(gvc, graph, "neato");
+      gvRender(gvc, graph, "png", graphFile);
+      gvFreeLayout(gvc, graph);
       std::fclose(graphFile);
 
       cv::Mat tmp = cv::imread("/tmp/render.png", cv::IMREAD_UNCHANGED);
@@ -155,82 +112,94 @@ void Graph::updateVisualisation()
   mUpdateVisualisation = true;
 }
 
-const Graph::Vertex *Graph::add(const PrimaryKey &primary, Vertex vertex)
+MemberProxies Graph::getOutgoing(const MemberPtr &member)
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(primary) LOG_VAR(&vertex));
-
-  Vertices::iterator it = mVertices.find(primary);
-  if (it != mVertices.end())
-    return nullptr;
-
-  mVertices.emplace(primary, std::move(vertex));
-  return &(it->second);
-}
-
-static void getBlindspotsInternal(
-  const Graph &graph,
-  MemberIds currentPath,
-  MemberIds &ioAllVertices,
-  MemberIds &oBlindSpots
-)
-{
-  LOG_TRACE(LOG_VAR(&graph) LOG_VAR(currentPath) LOG_VAR(ioAllVertices) LOG_VAR(oBlindSpots));
-
-  // get outgoing edges (and their count) for currently observed vertex
-  const PrimaryKey &currentVertex = currentPath.back();
-  const MemberIds &outgoingEdges = graph.get(currentVertex)->outgoing;
-  size_t nrOutgoingEdges = outgoingEdges.size();
-
-  // if there are no more outgoing edges or the only outgoing edge is already in the path,
-  // i.e. the path loops, the current node should be monitored as a potential blind spot
-  if (nrOutgoingEdges == 0ul ||
-      (nrOutgoingEdges == 1ul && std::find(currentPath.begin(), currentPath.end(), outgoingEdges.front()) != currentPath.end()))
+  MemberProxies outgoing;
+  if (member->mIsTopic)
   {
-    LOG_TRACE(currentVertex << " is blindspot")
-    oBlindSpots.push_back(currentVertex);
-    return;
-  }
+    const Topic *topic = ::asTopic(member);
 
-  // if there are outgoing edges, investigate all vertices they lead to
-  for (const PrimaryKey &outgoingEdgeTo: outgoingEdges)
-  {
-    // if the vertex has been visited already, ignore it
-    MemberIds::const_iterator it = std::find(ioAllVertices.begin(), ioAllVertices.end(), outgoingEdgeTo);
-    if (it == ioAllVertices.end())
-      continue;
-
-    // if the vertex has not been visited, mark it as such and investigate it
-    ioAllVertices.erase(it);
-    currentPath.push_back(outgoingEdgeTo);
-    getBlindspotsInternal(graph, currentPath, ioAllVertices, oBlindSpots);
-  }
-}
-
-MemberIds getBlindspots(const Graph &graph)
-{
-  LOG_TRACE(LOG_VAR(&graph));
-
-  // get a vector of all vertices in the graph
-  MemberIds allVertices;
-  allVertices.reserve(graph.mVertices.size());
-  std::transform(
-    graph.mVertices.begin(), graph.mVertices.end(),
-    std::back_inserter(allVertices),
-    [](const Graph::Vertices::value_type &vertex) -> MemberIds::value_type
+    for (const auto &[edge, targetNode]: topic->mSubscribers)
     {
-      return vertex.first;
-    }
-  );
+      if (!this->contains(targetNode))
+        continue;
 
-  MemberIds blindspots;
-  // visited vertices get removed, so initiate searches until there are no more unchecked vertices
-  while (!allVertices.empty())
+      outgoing.push_back(targetNode);
+    }
+  }
+  else
   {
-    PrimaryKey vertex = allVertices.back();
-    allVertices.pop_back();
-    LOG_TRACE("Starting new trace path from " LOG_VAR(vertex));
-    getBlindspotsInternal(graph, {vertex}, allVertices, blindspots);
+    const Node *node = ::asNode(member);
+
+    for (const auto &[serviceName, clients]: node->mClients)
+      for (const MemberProxy &client: clients)
+      {
+        if (!this->contains(client))
+          continue;
+
+        outgoing.push_back(client);
+      }
+    for (const auto &[serviceName, clients]: node->mActionClients)
+      for (const MemberProxy &client: clients)
+      {
+        if (!this->contains(client))
+          continue;
+
+        outgoing.push_back(client);
+      }
+    for (const MemberProxy &targetTopic: node->mPublishesTo)
+    {
+      if (!this->contains(targetTopic))
+        continue;
+
+      outgoing.push_back(targetTopic);
+    }
   }
 
-  return blindspots;
+  return outgoing;
+}
+
+MemberProxies Graph::getIncoming(const MemberPtr &member)
+{
+  MemberProxies incoming;
+  if (member->mIsTopic)
+  {
+    const Topic *topic = ::asTopic(member);
+
+    for (const auto &[edge, sourceNode]: topic->mPublishers)
+    {
+      if (!this->contains(sourceNode))
+        continue;
+
+      incoming.push_back(sourceNode);
+    }
+  }
+  else
+  {
+    const Node *node = ::asNode(member);
+
+    for (const auto &[serviceName, server]: node->mServers)
+    {
+      if (!this->contains(server))
+        continue;
+
+      incoming.push_back(server);
+    }
+    for (const auto &[serviceName, server]: node->mActionServers)
+    {
+      if (!this->contains(server))
+        continue;
+
+      incoming.push_back(server);
+    }
+    for (const MemberProxy &targetTopic: node->mPublishesTo)
+    {
+      if (!this->contains(targetTopic))
+        continue;
+
+      incoming.push_back(targetTopic);
+    }
+  }
+
+  return incoming;
 }
