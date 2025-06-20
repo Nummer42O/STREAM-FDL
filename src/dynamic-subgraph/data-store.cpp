@@ -330,6 +330,77 @@ DataStore::SharedMemory DataStore::getCpuUtilisationMemory() const
   return SharedMemory(util::parseString(singleAttrResp.memAddress));
 }
 
+void DataStore::addSubUpdate(Nodes::iterator affected, PrimaryKey other)
+{
+  const ScopeLock scopedLock(mUpdatesMutex);
+
+  GraphView::iterator it = std::find_if(
+    mUpdates.begin(), mUpdates.end(),
+    [&affected](const GraphView::value_type &element) -> bool
+    {
+      return element.member.mPrimaryKey == affected->instance.mPrimaryKey;
+    }
+  );
+  if (it == mUpdates.end())
+    mUpdates.push_back(MemberConnections{
+      .member = MemberProxy(affected->instance.mPrimaryKey, false),
+      .connections = {MemberProxy(other, true),}
+    });
+  else
+    it->connections.push_back(MemberProxy(other, true));
+}
+
+void DataStore::addSendUpdate(Nodes::iterator affected, PrimaryKey other)
+{
+  const ScopeLock scopedLock(mUpdatesMutex);
+
+  GraphView::iterator it = std::find_if(
+    mUpdates.begin(), mUpdates.end(),
+    [&affected](const GraphView::value_type &element) -> bool
+    {
+      return element.member.mPrimaryKey == affected->instance.mPrimaryKey;
+    }
+  );
+  if (it == mUpdates.end())
+    mUpdates.push_back(MemberConnections{
+      .member = MemberProxy(affected->instance.mPrimaryKey, false),
+      .connections = {MemberProxy(other, false),}
+    });
+  else
+    it->connections.push_back(MemberProxy(other, false));
+}
+
+void DataStore::addPubUpdate(Topics::iterator affected, PrimaryKey other)
+{
+  const ScopeLock scopedLock(mUpdatesMutex);
+
+  GraphView::iterator it = std::find_if(
+    mUpdates.begin(), mUpdates.end(),
+    [&affected](const GraphView::value_type &element) -> bool
+    {
+      return element.member.mPrimaryKey == affected->instance.mPrimaryKey;
+    }
+  );
+  if (it == mUpdates.end())
+    mUpdates.push_back(MemberConnections{
+      .member = MemberProxy(affected->instance.mPrimaryKey, true),
+      .connections = {MemberProxy(other, false),}
+    });
+  else
+    it->connections.push_back(MemberProxy(other, false));
+}
+
+DataStore::GraphView DataStore::getUpdates()
+{
+  GraphView output;
+  const ScopeLock scopedLock(mUpdatesMutex);
+
+  std::move(mUpdates.begin(), mUpdates.end(), std::back_inserter(output));
+  mUpdates.clear();
+
+  return output;
+}
+
 void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()))
@@ -396,7 +467,10 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       const ScopeLock scopedLock(mNodesMutex);
       Nodes::iterator it = mNodes.find(primaryKey);
       if (it != mNodes.end())
+      {
         it->instance.update(subscribersToUpdateValue);
+        this->addSubUpdate(it, util::parseString(subscribersToUpdateValue.subscribesTo));
+      }
       else
         LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
@@ -424,7 +498,10 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       const ScopeLock scopedLock(mNodesMutex);
       Nodes::iterator it = mNodes.find(primaryKey);
       if (it != mNodes.end())
+      {
         it->instance.update(isClientOfUpdateValue);
+        this->addSendUpdate(it, util::parseString(isClientOfUpdateValue.serverNodeId));
+      }
       else
         LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
@@ -452,7 +529,10 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       const ScopeLock scopedLock(mNodesMutex);
       Nodes::iterator it = mNodes.find(primaryKey);
       if (it != mNodes.end())
+      {
         it->instance.update(isActionClientOfUpdateValue);
+        this->addSendUpdate(it, util::parseString(isActionClientOfUpdateValue.actionserverNodeId));
+      }
       else
         LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
@@ -478,12 +558,13 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       PrimaryKey primaryKey = util::parseString(publishersUpdateValue.primaryKey);
       LOG_TRACE("Got TopicPublishersUpdate for " LOG_VAR(primaryKey));
 
-      {}
-
       const ScopeLock scopedLock(mTopicsMutex);
       Topics::iterator it = mTopics.find(primaryKey);
       if (it != mTopics.end())
+      {
         it->instance.update(publishersUpdateValue);
+        this->addPubUpdate(it, util::parseString(publishersUpdateValue.publisher));
+      }
       else
         LOG_ERROR("No topic with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }

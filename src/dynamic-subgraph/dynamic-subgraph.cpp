@@ -47,8 +47,22 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
       blindSpotCheck();
     mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
 
+    DataStore::GraphView updates = mpDataStore->getUpdates();
+    LOG_INFO("Got " << updates.size() << " updates.");
+    if (!updates.empty())
+    {
+      for (const DataStore::MemberConnections &update: updates)
+      {
+        if (!mSAG.contains(update.member))
+          continue;
+        for (const MemberProxy &member: update.connections)
+          if (!mWatchlist.contains(member.mPrimaryKey))
+            mWatchlist.addMember(member);
+      }
+    }
+
     Alerts emittedAlerts = mFD.getEmittedAlerts();
-    LOG_DEBUG("Got " << emittedAlerts.size() << " alerts.");
+    LOG_INFO("Got " << emittedAlerts.size() << " alerts.");
     if (!emittedAlerts.empty())
       expandSubgraph(emittedAlerts);
     if (checkAbortCirteria(emittedAlerts))

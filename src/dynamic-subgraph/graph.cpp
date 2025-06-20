@@ -95,6 +95,7 @@ void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTar
       assert(graphFile);
       gvLayout(gvc, graph, "neato");
       gvRender(gvc, graph, "png", graphFile);
+      // gvRenderFilename(gvc, graph, "png", "/tmp/render.png");
       gvFreeLayout(gvc, graph);
       std::fclose(graphFile);
 

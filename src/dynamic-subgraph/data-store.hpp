@@ -62,6 +62,19 @@ public:
   GraphView getFullGraphView() const;
   SharedMemory getCpuUtilisationMemory() const;
 
+  void addSubUpdate(
+    Nodes::iterator affected,
+    PrimaryKey other
+  );
+  void addSendUpdate(
+    Nodes::iterator affected,
+    PrimaryKey other
+  );
+  void addPubUpdate(
+    Topics::iterator affected,
+    PrimaryKey other
+  );
+  GraphView getUpdates();
   void run(
     const std::atomic<bool> &running,
     cr::milliseconds loopTargetInterval
@@ -85,7 +98,10 @@ private:
 private:
   Nodes         mNodes;
   Topics        mTopics;
-  std::mutex    mNodesMutex, mTopicsMutex;
+  GraphView     mUpdates;
+  std::mutex    mNodesMutex,
+                mTopicsMutex,
+                mUpdatesMutex;
   IpcClient     mIpcClient;
 
   static DataStore smInstance;

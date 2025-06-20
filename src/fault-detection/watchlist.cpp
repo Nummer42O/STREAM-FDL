@@ -18,7 +18,7 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
 
 void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 {
-  LOG_TRACE(LOG_THIS << member << "type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+  LOG_TRACE(LOG_THIS << member << " type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
 
   const ScopeLock scopeLock(mMembersMutex);
 
@@ -38,6 +38,28 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 
   bool emplaced;
   std::tie(it, emplaced) = mMembers.emplace(std::move(memberPtr), type);
+  assert(emplaced);
+}
+
+void Watchlist::addMember(MemberPtr member, WatchlistMemberType type)
+{
+  LOG_TRACE(LOG_THIS << member << " type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+
+  const ScopeLock scopeLock(mMembersMutex);
+
+  InternalMembers::iterator it = std::find_if(
+    mMembers.begin(), mMembers.end(),
+    [&member](const InternalMembers::value_type &internalMember) -> bool
+    {
+      return internalMember.first == member;
+    }
+  );
+  if (it == mMembers.end())
+    return;
+
+  LOG_TRACE("Adding member " << member << " to watchlist");
+  bool emplaced;
+  std::tie(it, emplaced) = mMembers.emplace(std::move(member), type);
   assert(emplaced);
 }
 
