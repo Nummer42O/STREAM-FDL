@@ -57,13 +57,16 @@ bool Graph::contains(const MemberProxy &member) const
   return it != mVertices.end();
 }
 
-void Graph::visualise(const std::atomic<bool> &running)
+void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS)
 
   cv::Mat image = cv::Mat::ones(10, 10, CV_8UC4);
+  Timestamp start, stop;
   while (running.load())
   {
+    start = cr::system_clock::now();
+
     if (mUpdateVisualisation)
     {
       LOG_DEBUG("updating visualisation")
@@ -99,10 +102,18 @@ void Graph::visualise(const std::atomic<bool> &running)
       LOG_DEBUG("New image is empty: " << tmp.empty());
       if (!tmp.empty())
         image = std::move(tmp);
+
+      gvFreeContext(gvc);
     }
 
     cv::imshow("Subgraph", image);
-    cv::waitKey(100);
+
+    stop = cr::system_clock::now();
+    cr::milliseconds remainingTime = loopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    if (remainingTime.count() > 0)
+      cv::waitKey(remainingTime.count());
+    else
+      cv::waitKey(1);
   }
 }
 

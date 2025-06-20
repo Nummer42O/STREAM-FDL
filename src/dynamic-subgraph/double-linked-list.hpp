@@ -90,6 +90,7 @@ private:
 
 public:
   DoubleLinkedList();
+  ~DoubleLinkedList();
 
   template<typename U>
   iterator emplace_back(const U &response, requestId_t requestId);

@@ -40,7 +40,8 @@ MemberPtr::MemberPtr(Member *member, AtomicCounter *useCounter):
   mpMember(member),
   mpUseCounter(useCounter)
 {
-  mpUseCounter->increase();
+  //! NOTE: expected to be done by data store to avoid races with DataStore::run
+  // mpUseCounter->increase();
   LOG_TRACE(LOG_THIS << *this);
 }
 

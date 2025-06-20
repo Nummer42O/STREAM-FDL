@@ -18,6 +18,8 @@ namespace json = nlohmann;
 #include <memory>
 #include <vector>
 #include <thread>
+#include <chrono>
+namespace cr = std::chrono;
 
 
 class DataStore
@@ -61,7 +63,8 @@ public:
   SharedMemory getCpuUtilisationMemory() const;
 
   void run(
-    const std::atomic<bool> &running
+    const std::atomic<bool> &running,
+    cr::milliseconds loopTargetInterval
   );
 
 private:

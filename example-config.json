@@ -14,8 +14,6 @@
   "initial-watchlist-members": [
     "/hallo/erde/erde_listener"
   ],
-  "fault-detection": {
-    "moving-window-size": 10,
-    "target-frequency": 10.0
-  }
+  "moving-window-size": 10,
+  "target-frequency": 10.0
 }

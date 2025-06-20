@@ -29,9 +29,8 @@ namespace fs = std::filesystem;
 #define CONFIG_BLINDSPOT_INTERVAL               "blindspot-interval"
 #define CONFIG_BLINDSPOT_CPU_THRESHOLD          "blindspot-cpu-threshold"
 #define CONFIG_WATCHLIST                        "initial-watchlist-members"
-#define CONFIG_FAULT_DETECTION                  "fault-detection"
-#define   CONFIG_MOVING_WINDOW_SIZE             "moving-window-size"
-#define   CONFIG_TARGET_FREQUENCY               "target-frequency"
+#define CONFIG_MOVING_WINDOW_SIZE               "moving-window-size"
+#define CONFIG_TARGET_FREQUENCY                 "target-frequency"
 
 
 #define MAKE_RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}

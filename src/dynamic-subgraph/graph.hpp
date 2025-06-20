@@ -6,6 +6,8 @@
 #include <thread>
 #include <map>
 #include <atomic>
+#include <chrono>
+namespace cr = std::chrono;
 
 
 class Graph
@@ -26,7 +28,8 @@ public:
   void reset() { mVertices.clear(); }
 
   void visualise(
-    const std::atomic<bool> &running
+    const std::atomic<bool> &running,
+    cr::milliseconds loopTargetInterval
   );
   void updateVisualisation();
 

@@ -6,20 +6,18 @@
 #include <algorithm>
 #include <chrono>
 namespace cr = std::chrono;
-using namespace std::chrono_literals;
 #include <thread>
 
 
 FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, DataStore::Ptr dataStorePtr):
   mcpWatchlist(watchlist),
   mpDataStore(dataStorePtr),
-  cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
   cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(watchlist) LOG_VAR(dataStorePtr));
 }
 
-void FaultDetection::run(const std::atomic<bool> &running)
+void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
 
@@ -74,8 +72,8 @@ void FaultDetection::run(const std::atomic<bool> &running)
     }
 
     stop = cr::system_clock::now();
-    cr::milliseconds remainingTime = cmLoopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
-    if (remainingTime > 0ms)
+    cr::milliseconds remainingTime = loopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    if (remainingTime.count() > 0)
       std::this_thread::sleep_for(remainingTime);
   }
 }

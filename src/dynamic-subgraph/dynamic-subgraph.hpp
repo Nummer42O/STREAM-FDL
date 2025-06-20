@@ -11,6 +11,8 @@
 namespace json = nlohmann;
 
 #include <atomic>
+#include <chrono>
+namespace cr = std::chrono;
 
 
 class DynamicSubgraphBuilder
@@ -56,6 +58,7 @@ private:
   CircularBuffer            mLastNrAlerts;
   size_t                    mBlindSpotCheckCounter;
 
+  const cr::milliseconds    cmLoopTargetInterval;
   const size_t              cmBlindspotInterval;
   const double              cmAbortionCriteriaThreshold;
   const double              cmMaximumCpuUtilisation;

@@ -51,7 +51,8 @@ public:
   );
 
   void run(
-    const std::atomic<bool> &running
+    const std::atomic<bool> &running,
+    cr::milliseconds loopTargetInterval
   );
 
   Alerts getEmittedAlerts();
@@ -81,6 +82,5 @@ private:
   MemberWindow mMovingWindow;
   DataStore::Ptr mpDataStore;
 
-  const cr::milliseconds cmLoopTargetInterval;
   const size_t cmMovingWindowSize;
 };

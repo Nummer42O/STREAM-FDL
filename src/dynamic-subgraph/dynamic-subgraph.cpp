@@ -3,15 +3,17 @@
 #include "common.hpp"
 
 #include <thread>
+using namespace std::chrono_literals;
 
 
 DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
   mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
-  mFD(config.at(CONFIG_FAULT_DETECTION), &mWatchlist, dataStorePtr),
+  mFD(config, &mWatchlist, dataStorePtr),
   mpDataStore(dataStorePtr),
   mSomethingIsGoingOn(false),
   mLastNrAlerts(config.at(CONFIG_ALERT_RATE).at(CONFIG_NR_NORMALISATION_VALUES).get<size_t>()),
   mBlindSpotCheckCounter(0ul),
+  cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
   cmBlindspotInterval(config.at(CONFIG_BLINDSPOT_INTERVAL).get<size_t>()),
   cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>()),
   cmMaximumCpuUtilisation(config.at(CONFIG_BLINDSPOT_CPU_THRESHOLD).get<double>())
@@ -25,12 +27,15 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
 
-  std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running));
-  std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running));
-  std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running));
+  std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
+  std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running), cmLoopTargetInterval);
+  std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running), cmLoopTargetInterval);
 
+  Timestamp start, stop;
   while (running.load())
   {
+    start = cr::system_clock::now();
+
     sharedMem::Response resp = MAKE_RESPONSE;
     mCpuUtilisationSource.receive(resp);
     assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
@@ -61,6 +66,11 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
     }
 
     //! TODO: std::move emittedAlerts into FTE-Alert-DB
+
+    stop = cr::system_clock::now();
+    cr::milliseconds remainingTime = cmLoopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    if (remainingTime.count() > 0)
+      std::this_thread::sleep_for(remainingTime);
   }
   LOG_INFO("Dynamic Subgraph Builder mainloop terminated.");
 

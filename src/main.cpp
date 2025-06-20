@@ -16,9 +16,9 @@ namespace fs = std::filesystem;
 
 
 static std::atomic<bool> gIsRunning;
-void sigintHandler(int)
+void sigintHandler(int signum)
 {
-  LOG_INFO("Called SIGINT handler, aborting.");
+  LOG_INFO("Received " << ::strsignal(signum) << ", aborting.");
   gIsRunning.store(false);
 }
 
@@ -56,10 +56,12 @@ int main(int argc, char *argv[])
     DynamicSubgraphBuilder dsg(config, &dataStore);
     LOG_TRACE("Initialised DataStore and DSG.");
 
-    sighandler_t defaultHandler = signal(SIGINT, sigintHandler);
+    sighandler_t intHandler = signal(SIGINT, sigintHandler);
+    sighandler_t hupHandler = signal(SIGHUP, sigintHandler);
     gIsRunning.store(true);
     dsg.run(gIsRunning);
-    signal(SIGINT, defaultHandler);
+    signal(SIGINT, intHandler);
+    signal(SIGHUP, hupHandler);
     LOG_TRACE("Main loop exited.")
   }
 

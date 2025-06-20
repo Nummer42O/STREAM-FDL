@@ -10,24 +10,17 @@ Fault Detection and Localization Module for STREAM Pipeline.
 # TODO
 
 ## high priority
-- possible optimisation:
-  - make FD and SGB run in sync, not independent
-  - eliminates need for FD thread
-  - watchlist doesn't need to be mt-safe anymore -> allows easier, more STL like access
+- reimplement ODDAD, with 3-sigma-rule fallback
+- "new (adjacent) nodes" list
+
+## low priority
 - Alerts:
   - severities?
   - DB
-- reimplement ODDAD, with 3-sigma-rule fallback
-
-## low priority
 - rethink some of the move semantics
-- determine actual config file schema
-  - see thesis
-- DataStore::run frequency/wait time
 - optimise primaryKeys into byte arrays as they are of fixed size anyways
 
 ## ideas
-- "new (adjacent) nodes" list
 - actual attribute names:
   - name mapping in IPC for default attributes
   - attribute name mapping in config for attributes which are manually piped into IPC

@@ -13,7 +13,6 @@ namespace json = nlohmann;
 #include <optional>
 #include <chrono>
 namespace cr = std::chrono;
-using namespace std::chrono_literals;
 #include <thread>
 #include <unistd.h>
 #include <cstring>
@@ -228,7 +227,7 @@ DataStore::GraphView DataStore::getFullGraphView() const
   {
     primaryKey = node["primaryKey"].get<PrimaryKey>();
     LOG_TRACE("Adding Node to graph with " LOG_VAR(primaryKey));
-    output.emplace_back(MemberProxy(primaryKey, true), MemberProxies());
+    output.emplace_back(MemberProxy(primaryKey, false), MemberProxies());
   }
   for (const json::json &topic: queryResponseData["passive"])
   {
@@ -236,7 +235,6 @@ DataStore::GraphView DataStore::getFullGraphView() const
     LOG_TRACE("Adding Topic to graph with " LOG_VAR(primaryKey));
     output.emplace_back(MemberProxy(primaryKey, true), MemberProxies());
   }
-  // std::sort(output.begin(), output.end());
 
   // construct graph edges
   for (const json::json &sub: queryResponseData["sub"])
@@ -332,12 +330,15 @@ DataStore::SharedMemory DataStore::getCpuUtilisationMemory() const
   return SharedMemory(util::parseString(singleAttrResp.memAddress));
 }
 
-void DataStore::run(const std::atomic<bool> &running)
+void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()))
 
+  Timestamp start, stop;
   while (running.load())
   {
+    start = cr::system_clock::now();
+
     for (Nodes::iterator it = mNodes.begin(); it != mNodes.end();)
     {
       if (it->useCounter.nonZero())
@@ -500,6 +501,11 @@ void DataStore::run(const std::atomic<bool> &running)
       else
         LOG_ERROR("No topic with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
+
+    stop = cr::system_clock::now();
+    cr::milliseconds remainingTime = loopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    if (remainingTime.count() > 0)
+      std::this_thread::sleep_for(remainingTime);
   }
 }
 
