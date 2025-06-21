@@ -14,11 +14,19 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
       (config.is_array() && config.empty()))
     return;
   config.get_to(mInitialMemberNames);
+
+  //! TODO: when this also accepts topics eventually, we should probably clean from ignored topics
 }
 
 void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 {
   LOG_TRACE(LOG_THIS << member << " type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+
+  if (member.mIsTopic && mpDataStore->checkTopicPrimaryIgnored(member.mPrimaryKey))
+  {
+    LOG_DEBUG("Requested ignored member " << member << ", not adding to watchlist.");
+    return;
+  }
 
   const ScopeLock scopeLock(mMembersMutex);
 
@@ -34,7 +42,6 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 
   LOG_TRACE("Adding member " << member << " to watchlist");
   MemberPtr memberPtr = mpDataStore->get(member);
-  assert(memberPtr.valid());
 
   bool emplaced;
   std::tie(it, emplaced) = mMembers.emplace(std::move(memberPtr), type);
@@ -126,7 +133,10 @@ void Watchlist::tryInitialise()
   {
     MemberPtr node = mpDataStore->getNodeByName(*it);
     if (!node.valid())
+    {
       ++it;
+      continue;
+    }
 
     mMembers.emplace(std::move(node), TYPE_INITIAL);
     it = mInitialMemberNames.erase(it);

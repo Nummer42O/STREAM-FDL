@@ -8,7 +8,7 @@ using namespace std::chrono_literals;
 
 DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
   mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
-  mFD(config, &mWatchlist, dataStorePtr),
+  mFD(config, &mWatchlist),
   mpDataStore(dataStorePtr),
   mSomethingIsGoingOn(false),
   mLastNrAlerts(config.at(CONFIG_ALERT_RATE).at(CONFIG_NR_NORMALISATION_VALUES).get<size_t>()),

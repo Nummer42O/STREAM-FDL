@@ -39,15 +39,9 @@ private:
   using MemberWindow = std::map<MemberPtr, AttributeWindow>;
 
 public:
-  /**
-   * initialise watchlist
-   *
-   * @param config json subconfiguration object
-   */
   FaultDetection(
     const json::json &config,
-    Watchlist *watchlist,
-    DataStore::Ptr dataStorePtr
+    Watchlist *const watchlist
   );
 
   void run(
@@ -80,7 +74,6 @@ private:
   Alerts mAlerts;
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;
-  DataStore::Ptr mpDataStore;
 
   const size_t cmMovingWindowSize;
 };
