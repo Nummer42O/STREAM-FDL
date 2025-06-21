@@ -29,21 +29,15 @@ struct Alert
 
 class FaultDetection
 {
-friend class DynamicSubgraphBuilder;
-
 public:
   using Alerts = std::vector<Alert>;
 
 private:
   using AttributeWindow = std::map<Member::AttributeDescriptor, CircularBuffer>;
   using MemberWindow = std::map<MemberPtr, AttributeWindow>;
+  using FaultMapping = std::map<std::string /*name*/, Timestamp /*fault start time*/>;
 
 public:
-  /**
-   * initialise watchlist
-   *
-   * @param config json subconfiguration object
-   */
   FaultDetection(
     const json::json &config,
     Watchlist *watchlist,
@@ -65,21 +59,29 @@ private:
   AttributeWindow createAttrWindow(
     const Member::AttributeMapping &attributeMapping
   ) const;
+
   static void updateAttrWindow(
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
   );
-  static bool detectFaults(
+
+  bool detectFaults(
     MemberPtr member,
     const AttributeWindow &window,
     Alert &oAlert
   );
 
+  void initialiseFaultMapping(
+    const json::json &config
+  );
+
 private:
-  Watchlist *const mcpWatchlist;
   Alerts mAlerts;
   std::mutex mAlertMutex;
   MemberWindow mMovingWindow;
+  FaultMapping mFaultMapping;
+
+  Watchlist *const mcpWatchlist;
   DataStore::Ptr mpDataStore;
 
   const size_t cmMovingWindowSize;

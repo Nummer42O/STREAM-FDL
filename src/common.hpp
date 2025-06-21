@@ -30,10 +30,10 @@ namespace fs = std::filesystem;
 #define CONFIG_BLINDSPOT_CPU_THRESHOLD          "blindspot-cpu-threshold"
 #define CONFIG_WATCHLIST                        "initial-watchlist-members"
 #define CONFIG_MOVING_WINDOW_SIZE               "moving-window-size"
+#define CONFIG_TIMED_FAULTS                     "timed-faults"
+#define   CONFIG_MEMBER_NAME                    "name"
+#define   CONFIG_MEMBER_TIMEOUT                 "timeout-s"
 #define CONFIG_TARGET_FREQUENCY                 "target-frequency"
-
-
-#define MAKE_RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}
 
 
 #define _LOG_LEVEL_TRACE  0
@@ -133,6 +133,8 @@ namespace fs = std::filesystem;
 #define LOG_FATAL(msg) {} // empty expression so logging can also be part of a conditional block without weirdness happening
 #endif // FDL_LOG_LEVEL <= _LOG_LEVEL_FATAL
 
+
+#define MAKE_RESPONSE sharedMem::Response{.header = sharedMem::ResponseHeader(), .numerical = sharedMem::NumericalResponse()}
 
 using Timestamp = cr::system_clock::time_point;
 using PrimaryKey = std::string;

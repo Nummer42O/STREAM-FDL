@@ -15,6 +15,8 @@ FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, D
   cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(watchlist) LOG_VAR(dataStorePtr));
+
+  this->initialiseFaultMapping(config.at(CONFIG_TIMED_FAULTS));
 }
 
 void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
@@ -36,9 +38,9 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
 
       MemberWindow::iterator it = mMovingWindow.find(member);
       if (it == mMovingWindow.end())
-        mMovingWindow.emplace(std::move(member), createAttrWindow(attributes));
+        mMovingWindow.emplace(std::move(member), this->createAttrWindow(attributes));
       else
-        updateAttrWindow(it->second, attributes);
+        this->updateAttrWindow(it->second, attributes);
     }
 
     for (MemberWindow::iterator it = mMovingWindow.begin(); it != mMovingWindow.end();)
@@ -56,7 +58,7 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
 
       // check if there is a fault
       Alert alert;
-      if (detectFaults(memberPtr, attributeWindow, alert))
+      if (this->detectFaults(memberPtr, attributeWindow, alert))
       {
         LOG_DEBUG("Detected fault for member " << memberPtr);
         const ScopeLock scopedLock(mAlertMutex);
@@ -118,9 +120,14 @@ void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::Att
 bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &window, Alert &oAlert)
 {
   LOG_TRACE(LOG_VAR(member) LOG_VAR(&window) LOG_VAR(&oAlert));
+  oAlert.member = member;
 
+  //! NOTE: for evaluation purposes, this method is replaced by a rigged
+  //!       system that emulated finding faults based on a configuration
+  /*
   oAlert.timestamp = cr::system_clock::now();
   oAlert.severity = Alert::SEVERITY_NORMAL;
+
   if (!member->mIsTopic && !::asNode(member)->mAlive)
     return true;
 
@@ -137,5 +144,33 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
         mean + 3 * stdDev < currentValue)
       oAlert.affectedAttributes.push_back(descriptor);
   }
+
   return !oAlert.affectedAttributes.empty();
+  */
+
+  const std::string &name = member->mIsTopic ? ::asTopic(member)->mName : ::asNode(member)->mName;
+  FaultMapping::iterator it = mFaultMapping.find(name);
+  if (it == mFaultMapping.end())
+    return false;
+  return (cr::system_clock::now() >= it->second);
+}
+
+void FaultDetection::initialiseFaultMapping(const json::json &config)
+{
+  assert(config.is_array());
+
+  for (const json::json &fault: config)
+  {
+    std::string name = fault.at(CONFIG_MEMBER_NAME).get<std::string>();
+    assert(!name.empty());
+    double timeoutS = fault.at(CONFIG_MEMBER_TIMEOUT).get<double>();
+    assert(timeoutS > 0.0);
+
+    auto [it, emplaced] = mFaultMapping.emplace(
+      std::move(name),
+      cr::system_clock::now() + cr::milliseconds(static_cast<size_t>(timeoutS * 1'000))
+    );
+    //! TODO: this should probably be checked normally and throw an exception
+    assert(emplaced);
+  }
 }
