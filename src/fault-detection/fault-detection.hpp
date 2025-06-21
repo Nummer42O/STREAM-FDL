@@ -40,8 +40,7 @@ private:
 public:
   FaultDetection(
     const json::json &config,
-    Watchlist *watchlist,
-    DataStore::Ptr dataStorePtr
+    Watchlist *const watchlist
   );
 
   void run(
@@ -82,7 +81,6 @@ private:
   FaultMapping mFaultMapping;
 
   Watchlist *const mcpWatchlist;
-  DataStore::Ptr mpDataStore;
 
   const size_t cmMovingWindowSize;
 };

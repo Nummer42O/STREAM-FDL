@@ -23,6 +23,33 @@ DataStore::DataStore(const json::json &config):
   mIpcClient(tryMakeIpcClient(config.at(CONFIG_IPC)))
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config));
+
+  requestId_t searchRequestId;
+  SearchRequest req{
+    .type = SearchRequest::TOPIC
+  };
+
+  util::parseString(req.name, "/rosout");
+  mIpcClient.sendSearchRequest(req, searchRequestId);
+  mTopicRosoutKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  while(mTopicRosoutKey.empty())
+  {
+    std::this_thread::sleep_for(cr::milliseconds(100));
+
+    mIpcClient.sendSearchRequest(req, searchRequestId);
+    mTopicRosoutKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  }
+
+  util::parseString(req.name, "/parameter_events");
+  mIpcClient.sendSearchRequest(req, searchRequestId);
+  mTopicParameterEventsKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  while(mTopicParameterEventsKey.empty())
+  {
+    std::this_thread::sleep_for(cr::milliseconds(100));
+
+    mIpcClient.sendSearchRequest(req, searchRequestId);
+    mTopicParameterEventsKey = util::parseString(mIpcClient.receiveSearchResponse().value().primaryKey);
+  }
 }
 
 const MemberPtr DataStore::getNode(const PrimaryKey &primary)
@@ -232,6 +259,9 @@ DataStore::GraphView DataStore::getFullGraphView() const
   for (const json::json &topic: queryResponseData["passive"])
   {
     primaryKey = topic["primaryKey"].get<PrimaryKey>();
+    if (this->checkTopicPrimaryIgnored(primaryKey))
+      continue;
+
     LOG_TRACE("Adding Topic to graph with " LOG_VAR(primaryKey));
     output.emplace_back(MemberProxy(primaryKey, true), MemberProxies());
   }
@@ -245,6 +275,9 @@ DataStore::GraphView DataStore::getFullGraphView() const
     std::string
       fromPrimaryKey = sub["from"]["primaryKey"],
       toPrimaryKey   = sub["to"]["primaryKey"];
+    if (this->checkTopicPrimaryIgnored(fromPrimaryKey))
+      continue;
+
     GraphView::iterator it = std::find_if(
       output.begin(), output.end(),
       [&fromPrimaryKey](const GraphView::value_type &element) -> bool
@@ -264,6 +297,9 @@ DataStore::GraphView DataStore::getFullGraphView() const
     std::string
       fromPrimaryKey = pub["from"]["primaryKey"],
       toPrimaryKey   = pub["to"]["primaryKey"];
+    if (this->checkTopicPrimaryIgnored(toPrimaryKey))
+      continue;
+
     GraphView::iterator it = std::find_if(
       output.begin(), output.end(),
       [&fromPrimaryKey](const GraphView::value_type &element) -> bool
@@ -627,4 +663,20 @@ IpcClient DataStore::tryMakeIpcClient(const json::json &config)
 
     std::this_thread::sleep_for(timeout);
   }
+}
+
+constexpr bool DataStore::checkTopicNameIgnored(const std::string &memberName)
+{
+  return (
+    memberName == "/rosout" ||
+    memberName == "/parameter_events"
+  );
+}
+
+bool DataStore::checkTopicPrimaryIgnored(const PrimaryKey &member) const
+{
+  return (
+    member == mTopicParameterEventsKey ||
+    member == mTopicRosoutKey
+  );
 }

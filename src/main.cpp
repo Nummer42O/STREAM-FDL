@@ -48,7 +48,10 @@ int main(int argc, char *argv[])
   }
 
   LOG_DEBUG("Opened config file: " << configFilePath);
-  json::json config = json::json::parse(configFile);
+  //! NOTE: theoretically json::json::parse has a third boolean argument to
+  //!       ignore trailing commas too, but aparently not? See:
+  //!       https://json.nlohmann.me/api/basic_json/parse/
+  json::json config = json::json::parse(configFile, nullptr, true, true);
   configFile.close();
 
   {

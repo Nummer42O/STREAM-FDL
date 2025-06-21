@@ -12,7 +12,7 @@
   "blindspot-interval": 15,
   "blindspot-cpu-threshold": 0.8,
   "initial-watchlist-members": [
-    "/hallo/erde/erde_listener"
+    // "/hallo/erde/erde_listener"
   ],
   "moving-window-size": 10,
   "target-frequency": 10.0

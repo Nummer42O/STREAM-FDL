@@ -9,12 +9,11 @@ namespace cr = std::chrono;
 #include <thread>
 
 
-FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist, DataStore::Ptr dataStorePtr):
+FaultDetection::FaultDetection(const json::json &config, Watchlist *watchlist):
   mcpWatchlist(watchlist),
-  mpDataStore(dataStorePtr),
   cmMovingWindowSize(config.at(CONFIG_MOVING_WINDOW_SIZE).get<size_t>())
 {
-  LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(watchlist) LOG_VAR(dataStorePtr));
+  LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(watchlist));
 
   this->initialiseFaultMapping(config.at(CONFIG_TIMED_FAULTS));
 }

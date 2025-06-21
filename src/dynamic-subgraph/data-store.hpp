@@ -80,6 +80,14 @@ public:
     cr::milliseconds loopTargetInterval
   );
 
+  static constexpr bool checkTopicNameIgnored(
+    const std::string &memberName
+  );
+
+  bool checkTopicPrimaryIgnored(
+    const PrimaryKey &member
+  ) const;
+
 private:
   MemberPtr requestNode(
     const PrimaryKey &primary,
@@ -103,6 +111,9 @@ private:
                 mTopicsMutex,
                 mUpdatesMutex;
   IpcClient     mIpcClient;
+
+  PrimaryKey    mTopicParameterEventsKey,
+                mTopicRosoutKey;
 
   static DataStore smInstance;
 };
