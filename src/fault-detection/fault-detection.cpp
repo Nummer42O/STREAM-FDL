@@ -119,8 +119,10 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
 {
   LOG_TRACE(LOG_VAR(member) LOG_VAR(&window) LOG_VAR(&oAlert));
 
+  oAlert.member = member;
   oAlert.timestamp = cr::system_clock::now();
   oAlert.severity = Alert::SEVERITY_NORMAL;
+
   if (!member->mIsTopic && !::asNode(member)->mAlive)
     return true;
 
