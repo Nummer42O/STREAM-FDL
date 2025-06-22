@@ -20,7 +20,7 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
 
 void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 {
-  LOG_TRACE(LOG_THIS << member << " type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+  LOG_TRACE(LOG_THIS << member << " type: " << type);
 
   if (member.mIsTopic && mpDataStore->checkTopicPrimaryIgnored(member.mPrimaryKey))
   {
@@ -37,7 +37,7 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
       return internalMember.first->mPrimaryKey == member.mPrimaryKey;
     }
   );
-  if (it == mMembers.end())
+  if (it != mMembers.end())
     return;
 
   LOG_TRACE("Adding member " << member << " to watchlist");
@@ -51,7 +51,7 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 
 void Watchlist::addMember(MemberPtr member, WatchlistMemberType type)
 {
-  LOG_TRACE(LOG_THIS << member << " type: " << (type == TYPE_NORMAL ? "normal" : ( type == TYPE_INITIAL ? "initial" : "blindspot")));
+  LOG_TRACE(LOG_THIS << member << " type: " << type);
 
   const ScopeLock scopeLock(mMembersMutex);
 
@@ -142,4 +142,24 @@ void Watchlist::tryInitialise()
     mMembers.emplace(std::move(node), TYPE_INITIAL);
     it = mInitialMemberNames.erase(it);
   }
+}
+
+std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type)
+{
+  switch (type)
+  {
+  case Watchlist::TYPE_NORMAL:
+    stream << "normal";
+    break;
+  case Watchlist::TYPE_INITIAL:
+    stream << "initial";
+    break;
+  case Watchlist::TYPE_BLINDSPOT:
+    stream << "blind-spot";
+    break;
+  default:
+    stream << "<unknown>";
+  }
+
+  return stream;
 }

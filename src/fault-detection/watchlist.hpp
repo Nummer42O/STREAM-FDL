@@ -9,6 +9,7 @@ namespace json = nlohmann;
 #include <map>
 #include <vector>
 #include <mutex>
+#include <iostream>
 
 
 class Watchlist
@@ -47,6 +48,11 @@ public:
     const PrimaryKey &member
   );
 
+  friend std::ostream &operator<<(
+    std::ostream &stream,
+    const Watchlist &watchlist
+  );
+
 private:
   void tryInitialise();
 
@@ -69,3 +75,4 @@ private:
   std::mutex mMembersMutex;
   DataStore::Ptr mpDataStore;
 };
+std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type);

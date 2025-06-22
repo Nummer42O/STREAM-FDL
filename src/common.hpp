@@ -164,23 +164,23 @@ public:
   explicit ScopeLock(std::mutex &mutex):
     mrMutex(mutex)
   {
-    LOG_INFO(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
+    LOG_TRACE(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
     mrMutex.lock();
-    LOG_INFO(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
+    LOG_TRACE(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
   }
 
   ScopeLock(std::mutex &mutex, std::adopt_lock_t) noexcept:
     mrMutex(mutex)
   {
-    LOG_INFO(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
+    LOG_TRACE(LOG_THIS " Attemting to lock " LOG_VAR(&mrMutex));
     mrMutex.lock();
-    LOG_INFO(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
+    LOG_TRACE(LOG_THIS " Locked mutex " LOG_VAR(&mrMutex));
   }
 
   ~ScopeLock()
   {
     mrMutex.unlock();
-    LOG_INFO(LOG_THIS " Unlocked mutex");
+    LOG_TRACE(LOG_THIS " Unlocked mutex");
   }
 
   ScopeLock(const ScopeLock&) = delete;

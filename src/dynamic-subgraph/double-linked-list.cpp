@@ -143,10 +143,16 @@ DoubleLinkedList<T>::iterator DoubleLinkedList<T>::erase(iterator it)
     *curr = it.mpElement,
     *prev = curr->mPrev,
     *next = curr->mNext;
+
   if (prev)
     prev->mNext = next;
+  else
+    mBegin = next;
+
   if (next)
     next->mPrev = prev;
+  else
+    mEnd = prev;
 
   delete curr;
 

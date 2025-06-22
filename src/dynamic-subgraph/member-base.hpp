@@ -107,6 +107,9 @@ public:
   bool operator==(
     const MemberPtr &other
   ) const { return mpMember == other.mpMember; }
+  bool operator<(
+    const MemberPtr &other
+  ) const { return mpMember < other.mpMember; }
 
   friend std::ostream &operator<<(
     std::ostream &stream,

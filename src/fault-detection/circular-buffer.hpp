@@ -2,6 +2,8 @@
 
 #include "dynamic-subgraph/members.hpp"
 
+#include <memory>
+
 
 class CircularBuffer
 {
@@ -9,9 +11,9 @@ friend class FaultDetection;
 
 public:
   using value_type = double;
-  using buffer_type = std::vector<value_type>;
-  using iterator = buffer_type::iterator;
-  using const_iterator = buffer_type::const_iterator;
+  using buffer_type = std::shared_ptr<value_type[]>;
+  using iterator = value_type*;
+  using const_iterator = const value_type*;
   using index_type = size_t;
 
 public:
@@ -30,20 +32,20 @@ public:
 
   value_type &at(
     index_type i
-  ) { return mBuffer.at(i); }
+  );
   value_type &operator[](
     index_type i
   ) { return mBuffer[i]; }
 
-  const_iterator begin() const { return mBuffer.begin(); }
-  const_iterator end() const { return mBuffer.end(); }
+  const_iterator begin() const { return mBuffer.get(); }
+  const_iterator end() const { return &mBuffer[mMaxSize]; }
   const_iterator current() const { return mCurrent; }
   const_iterator current(ptrdiff_t offset) const;
 
-  size_t size() const { return mBuffer.size(); }
+  size_t size() const { return mSize; }
   size_t maxSize() const { return mMaxSize; }
-  bool full() const { return mBuffer.size() == mMaxSize; }
-  bool empty() const { return mBuffer.empty(); }
+  bool full() const { return mSize == mMaxSize; }
+  bool empty() const { return mSize == 0; }
 
   double getMean() const;
   double getStdDev(
@@ -54,4 +56,5 @@ private:
   size_t mMaxSize;
   buffer_type mBuffer;
   iterator mCurrent;
+  size_t mSize;
 };

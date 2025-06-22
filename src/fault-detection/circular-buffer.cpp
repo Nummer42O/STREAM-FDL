@@ -9,20 +9,25 @@
 
 
 CircularBuffer::CircularBuffer(size_t maxSize):
-  mMaxSize(maxSize)
+  mMaxSize(maxSize),
+  mBuffer(std::make_shared<value_type[]>(maxSize)),
+  mSize(0ul)
 {
   assert(mMaxSize >= 2);
   LOG_TRACE(LOG_THIS LOG_VAR(maxSize));
 
-  mCurrent = mBuffer.begin();
+  mCurrent = &mBuffer[maxSize];
 }
 
 CircularBuffer::CircularBuffer(const CircularBuffer &other):
   mMaxSize(other.mMaxSize),
-  mBuffer(other.mBuffer),
-  mCurrent(mBuffer.begin() + (other.mCurrent - other.mBuffer.begin()))
+  mSize(other.mSize)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(&other));
+
+  ptrdiff_t offset = other.mCurrent - other.mBuffer.get();
+  mBuffer = other.mBuffer;
+  mCurrent = mBuffer.get() + offset;
 }
 
 CircularBuffer &CircularBuffer::operator=(const CircularBuffer &other)
@@ -30,19 +35,23 @@ CircularBuffer &CircularBuffer::operator=(const CircularBuffer &other)
   LOG_TRACE(LOG_THIS LOG_VAR(&other));
 
   mMaxSize = other.mMaxSize;
+  ptrdiff_t offset = other.mCurrent - other.mBuffer.get();
   mBuffer = other.mBuffer;
-  mCurrent = mBuffer.begin() + (other.mCurrent - other.mBuffer.begin());
+  mCurrent = mBuffer.get() + offset;
+  mSize = other.mSize;
 
   return *this;
 }
 
 CircularBuffer::CircularBuffer(CircularBuffer &&other):
   mMaxSize(other.mMaxSize),
-  mBuffer(std::move(other.mBuffer)),
-  //! NOTE: that should be fine from my testing
-  mCurrent(std::move(other.mCurrent))
+  mSize(other.mSize)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(&other));
+
+  ptrdiff_t offset = other.mCurrent - other.mBuffer.get();
+  mBuffer = std::move(other.mBuffer);
+  mCurrent = mBuffer.get() + offset;
 }
 
 CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
@@ -50,8 +59,10 @@ CircularBuffer &CircularBuffer::operator=(CircularBuffer &&other)
   LOG_TRACE(LOG_THIS LOG_VAR(&other));
 
   mMaxSize = other.mMaxSize;
+  ptrdiff_t offset = other.mCurrent - other.mBuffer.get();
   mBuffer = std::move(other.mBuffer);
-  mCurrent = std::move(other.mCurrent);
+  mCurrent = mBuffer.get() + offset;
+  mSize = other.mSize;
 
   return *this;
 }
@@ -60,28 +71,36 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(value));
 
-  //! FIX: seg fault on some value of mCurrent
-  iterator it = mBuffer.insert(mCurrent, value);
-  if (it == mBuffer.end() &&
-      mBuffer.size() == mMaxSize)
-    mCurrent = mBuffer.begin();
+  if (mSize < mMaxSize)
+    ++mSize;
+  if (mCurrent == this->end())
+    mCurrent = mBuffer.get();
   else
-    mCurrent = it;
+    ++mCurrent;
 
-  return it;
+  *mCurrent = value;
+
+  return mCurrent;
+}
+
+CircularBuffer::value_type &CircularBuffer::at(index_type i)
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(i));
+  assert(i < mSize);
+
+  return mBuffer[i];
 }
 
 CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
 {
   LOG_TRACE(LOG_THIS LOG_VAR(offset));
 
-  const_iterator beginIt = mBuffer.begin();
+  const_iterator beginIt = mBuffer.get();
   ptrdiff_t currentOffset = mCurrent - beginIt;
 
-  const size_t bufferSize = mBuffer.size();
-  ptrdiff_t computedOffset = (currentOffset + offset) % bufferSize;
+  ptrdiff_t computedOffset = (currentOffset + offset) % mSize;
   if (computedOffset < 0)
-    computedOffset += bufferSize;
+    computedOffset += mSize;
 
   return beginIt + computedOffset;
 }
@@ -90,16 +109,15 @@ double CircularBuffer::getMean() const
 {
   LOG_TRACE(LOG_THIS);
 
-  const size_t bufferSize = mBuffer.size();
-  assert(bufferSize >= 1);
+  assert(mSize >= 1);
 
   double mean = std::accumulate(
-    mBuffer.begin(), mBuffer.end(), 0.0,
+    this->begin(), this->end(), 0.0,
     [](double accumulator, double value) -> double
     {
       return accumulator + value;
     }
-  ) / bufferSize;
+  ) / mSize;
 
   return mean;
 }
@@ -108,23 +126,22 @@ double CircularBuffer::getStdDev(double mean) const
 {
   LOG_TRACE(LOG_THIS LOG_VAR(mean));
 
-  const size_t bufferSize = mBuffer.size();
-  assert(bufferSize >= 1);
+  assert(mSize >= 1);
 
   double stdDev = std::sqrt(std::accumulate(
-    mBuffer.begin(), mBuffer.end(), 0.0,
+    this->begin(), this->end(), 0.0,
     [mean](double accumulator, double value) -> double
     {
       return accumulator + (value - mean)*(value - mean);
     }
-  ) / bufferSize);
+  ) / mSize);
 
   /*! NOTE: alternative version based on unbiased sample variance
   double stdDev = std::sqrt(std::accumulate(
-    mBuffer.begin(), mBuffer.end(), 0.0,
-    [bufferSize, mean](double accumulator, double value) -> double
+    this->begin(), this->end(), 0.0,
+    [mSize, mean](double accumulator, double value) -> double
     {
-      return accumulator + ((value - mean)*(value - mean) / (bufferSize - 1));
+      return accumulator + ((value - mean)*(value - mean) / (mSize - 1));
     }
   ));
   */
