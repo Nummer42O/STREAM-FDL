@@ -125,7 +125,7 @@ std::ostream &operator<<(std::ostream &stream, const MemberPtr &member)
   if (!member.mpMember)
     stream << "Ptr()";
   else
-    stream << "Ptr(" << member.mpMember << " with counter: " << *member.mpUseCounter << ')';
+    stream << "Ptr(" << member.mpMember << ", counter=" << *member.mpUseCounter << ", name='" << ::getName(member) << "')";
 
   return stream;
 }

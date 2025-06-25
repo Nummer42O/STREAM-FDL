@@ -9,7 +9,10 @@ namespace json = nlohmann;
 #include <map>
 #include <vector>
 #include <mutex>
+#include <atomic>
 #include <iostream>
+#include <chrono>
+namespace cr = std::chrono;
 
 
 class Watchlist
@@ -19,9 +22,16 @@ public:
   {
     TYPE_NORMAL, TYPE_INITIAL, TYPE_BLINDSPOT
   };
+  struct WatchlistMember
+  {
+    MemberPtr member;
+    WatchlistMemberType type;
 
-private:
-  using InternalMembers = std::map<MemberPtr, WatchlistMemberType>;
+    bool operator<(
+      const WatchlistMember &other
+    ) const { return member < other.member; }
+  };
+  using WatchlistMembers = std::vector<WatchlistMember>;
 
 public:
   Watchlist(
@@ -37,41 +47,39 @@ public:
     MemberPtr member,
     WatchlistMemberType type = TYPE_NORMAL
   );
+  void removeMember(
+    const PrimaryKey &member
+  );
 
   bool contains(
     const PrimaryKey &member
   );
   void reset();
 
-  Members getMembers();
-  bool notifyUsed(
-    const PrimaryKey &member
-  );
+  WatchlistMembers getMembers();
 
-  friend std::ostream &operator<<(
-    std::ostream &stream,
-    const Watchlist &watchlist
+  void run(
+    const std::atomic<bool> &running,
+    cr::milliseconds loopTargetInterval
   );
 
 private:
-  void tryInitialise();
-
-  InternalMembers::iterator get(
+  WatchlistMembers::iterator get(
     const PrimaryKey &member
   )
   {
     return std::find_if(
       mMembers.begin(), mMembers.end(),
-      [&member](const InternalMembers::value_type &element) -> bool
+      [&member](const WatchlistMembers::value_type &element) -> bool
       {
-        return element.first->mPrimaryKey == member;
+        return element.member->mPrimaryKey == member;
       }
     );
   }
 
 private:
   std::vector<std::string> mInitialMemberNames;
-  InternalMembers mMembers;
+  WatchlistMembers mMembers;
   std::mutex mMembersMutex;
   DataStore::Ptr mpDataStore;
 };

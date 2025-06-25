@@ -36,7 +36,7 @@ target_include_directories(main
 )
 target_compile_options(main
   PRIVATE
-    -Wall -Wextra -Wpedantic -Wno-ignored-qualifiers -Wno-error=unused-parameter -Werror
+    -Wall -Wextra -Wpedantic -Wno-ignored-qualifiers -Wno-error=unused-parameter -Wno-error=write-strings -Werror
 )
 target_compile_definitions(main
   PRIVATE

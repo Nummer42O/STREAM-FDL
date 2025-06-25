@@ -57,6 +57,7 @@ bool Graph::contains(const MemberProxy &member) const
   return it != mVertices.end();
 }
 
+#define PSEUDO_CSTR(string) const_cast<char *>((string).c_str())
 void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS)
@@ -76,28 +77,29 @@ void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTar
       {
         const ScopeLock scopedLock(mVerticesMutex);
 
-        char cPrimaryKey[37];
         for (const MemberPtr &vertex: mVertices)
         {
-          std::strcpy(cPrimaryKey, vertex->mPrimaryKey.c_str());
-          Agnode_t *fromNode = agnode(graph, cPrimaryKey, 1);
-          for (const MemberProxy &to: this->getOutgoing(vertex))
+          Agnode_t *fromNode = agnode(graph, PSEUDO_CSTR(vertex->mPrimaryKey), 1);
+          agsafeset(fromNode, const_cast<char *>("label"), PSEUDO_CSTR(::getName(vertex)), const_cast<char *>("<unknown>"));
+
+          MemberProxies outgoing = this->getOutgoing(vertex);
+          for (const MemberProxy &to: outgoing)
           {
-            std::strcpy(cPrimaryKey, to.mPrimaryKey.c_str());
-            Agnode_t *toNode = agnode(graph, cPrimaryKey, 1);
+            Agnode_t *toNode = agnode(graph, PSEUDO_CSTR(to.mPrimaryKey), 1);
             agedge(graph, fromNode, toNode, NULL, 1);
           }
         }
       }
       mUpdateVisualisation = false;
 
-      std::FILE *graphFile = std::fopen("/tmp/render.png", "wb+");
-      assert(graphFile);
+      // std::FILE *graphFile = std::fopen("/tmp/render.png", "wb+");
+      // assert(graphFile);
       gvLayout(gvc, graph, "neato");
-      gvRender(gvc, graph, "png", graphFile);
-      // gvRenderFilename(gvc, graph, "png", "/tmp/render.png");
+      // gvRender(gvc, graph, "png", graphFile);
+      gvRenderFilename(gvc, graph, "png", "/tmp/render.png");
+      gvRenderFilename(gvc, graph, "dot", "/tmp/render.dot");
       gvFreeLayout(gvc, graph);
-      std::fclose(graphFile);
+      // std::fclose(graphFile);
 
       cv::Mat tmp = cv::imread("/tmp/render.png", cv::IMREAD_UNCHANGED);
       LOG_DEBUG("New image is empty: " << tmp.empty());
@@ -110,7 +112,8 @@ void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTar
     cv::imshow("Subgraph", image);
 
     stop = cr::system_clock::now();
-    cr::milliseconds remainingTime = loopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds remainingTime = loopTargetInterval - elapsedTime;
     if (remainingTime.count() > 0)
       cv::waitKey(remainingTime.count());
     else
@@ -132,12 +135,8 @@ MemberProxies Graph::getOutgoing(const MemberPtr &member)
     const Topic *topic = ::asTopic(member);
 
     for (const auto &[edge, targetNode]: topic->mSubscribers)
-    {
-      if (!this->contains(targetNode))
-        continue;
-
-      outgoing.push_back(targetNode);
-    }
+      if (this->contains(targetNode))
+        outgoing.push_back(targetNode);
   }
   else
   {
@@ -145,27 +144,15 @@ MemberProxies Graph::getOutgoing(const MemberPtr &member)
 
     for (const auto &[serviceName, clients]: node->mClients)
       for (const MemberProxy &client: clients)
-      {
-        if (!this->contains(client))
-          continue;
-
-        outgoing.push_back(client);
-      }
+        if (this->contains(client))
+          outgoing.push_back(client);
     for (const auto &[serviceName, clients]: node->mActionClients)
       for (const MemberProxy &client: clients)
-      {
-        if (!this->contains(client))
-          continue;
-
-        outgoing.push_back(client);
-      }
+        if (this->contains(client))
+          outgoing.push_back(client);
     for (const MemberProxy &targetTopic: node->mPublishesTo)
-    {
-      if (!this->contains(targetTopic))
-        continue;
-
-      outgoing.push_back(targetTopic);
-    }
+      if (this->contains(targetTopic))
+        outgoing.push_back(targetTopic);
   }
 
   return outgoing;
@@ -179,39 +166,29 @@ MemberProxies Graph::getIncoming(const MemberPtr &member)
     const Topic *topic = ::asTopic(member);
 
     for (const auto &[edge, sourceNode]: topic->mPublishers)
-    {
-      if (!this->contains(sourceNode))
-        continue;
-
       incoming.push_back(sourceNode);
-    }
   }
   else
   {
     const Node *node = ::asNode(member);
 
     for (const auto &[serviceName, server]: node->mServers)
-    {
-      if (!this->contains(server))
-        continue;
-
       incoming.push_back(server);
-    }
     for (const auto &[serviceName, server]: node->mActionServers)
-    {
-      if (!this->contains(server))
-        continue;
-
       incoming.push_back(server);
-    }
-    for (const MemberProxy &targetTopic: node->mPublishesTo)
-    {
-      if (!this->contains(targetTopic))
-        continue;
-
+    for (const MemberProxy &targetTopic: node->mSubscribesTo)
       incoming.push_back(targetTopic);
-    }
   }
 
   return incoming;
+}
+
+std::ostream &operator<<(std::ostream &stream, const Graph &graph)
+{
+  stream << "{\n";
+  for (const MemberPtr &member: graph.mVertices)
+    stream << member << '\n';
+  stream << "}";
+
+  return stream;
 }

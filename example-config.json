@@ -2,18 +2,73 @@
   "ipc": {
     "project-id": 1,
     "retry-connection": true,
-    "retry-attempts": 5,
+    "retry-attempts": 0, //aka infinite
     "retry-timeout-ms": 1000
   },
   "alert-rate": {
-    "nr-normalisation-values": 10,
-    "abortion-criteria-threshold": 0.05
+    "nr-normalisation-values": 15,
+    "abortion-criteria-threshold": 0.9
   },
   "blindspot-interval": 15,
   "blindspot-cpu-threshold": 0.8,
   "initial-watchlist-members": [
     // "/hallo/erde/erde_listener"
+    "/arequipa"
   ],
   "moving-window-size": 10,
-  "target-frequency": 10.0
+  "target-frequency-hz": 50.0,
+  "timed-faults": [
+    {
+      "name": "/delhi",
+      "timeout-s": 10
+    },
+    {
+      "name": "/columbia",
+      "timeout-s": 10.1
+    },
+    {
+      "name": "/taipei",
+      "timeout-s": 10.2
+    },
+    {
+      "name": "/colorado",
+      "timeout-s": 10.3
+    },
+    {
+      "name": "/osaka",
+      "timeout-s": 10.4
+    },
+    {
+      "name": "/salween",
+      "timeout-s": 10.5
+    },
+    {
+      "name": "/mandalay",
+      "timeout-s": 10.6
+    },
+    {
+      "name": "/missouri",
+      "timeout-s": 10.7
+    },
+    {
+      "name": "/ponce",
+      "timeout-s": 10.8
+    },
+    {
+      "name": "/congo",
+      "timeout-s": 10.9
+    },
+    {
+      "name": "/geneva",
+      "timeout-s": 11
+    },
+    {
+      "name": "/arkansas",
+      "timeout-s": 11.1
+    },
+    {
+      "name": "/arequipa",
+      "timeout-s": 11.2
+    }
+  ]
 }

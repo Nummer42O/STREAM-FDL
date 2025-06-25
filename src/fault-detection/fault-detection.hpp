@@ -14,6 +14,7 @@ namespace json = nlohmann;
 #include <atomic>
 #include <chrono>
 namespace cr = std::chrono;
+#include <iostream>
 
 
 struct Alert
@@ -25,6 +26,10 @@ struct Alert
     SEVERITY_NORMAL //! TODO
   } severity = SEVERITY_NORMAL;
 };
+std::ostream &operator<<(
+  std::ostream &stream,
+  const Alert &alert
+);
 
 
 class FaultDetection
@@ -33,8 +38,9 @@ public:
   using Alerts = std::vector<Alert>;
 
 private:
+  using InternalMember = Watchlist::WatchlistMember;
   using AttributeWindow = std::map<Member::AttributeDescriptor, CircularBuffer>;
-  using MemberWindow = std::map<MemberPtr, AttributeWindow>;
+  using MemberWindow = std::map<InternalMember, AttributeWindow>;
   using FaultMapping = std::map<std::string /*name*/, Timestamp /*fault start time*/>;
 
 public:
@@ -82,5 +88,6 @@ private:
 
   Watchlist *const mcpWatchlist;
 
+  const json::json cmTimedFaultsConfig;
   const size_t cmMovingWindowSize;
 };

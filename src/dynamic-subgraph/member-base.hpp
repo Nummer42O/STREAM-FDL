@@ -101,8 +101,15 @@ public:
   bool valid() const { return mpMember != nullptr; }
 
   //! NOTE: to be defined in member.cpp, where Node and Topic are comlete types
-  friend const Node *asNode(const MemberPtr &member);
-  friend const Topic *asTopic(const MemberPtr &member);
+  friend const Node *asNode(
+    const MemberPtr &member
+  );
+  friend const Topic *asTopic(
+    const MemberPtr &member
+  );
+  friend const std::string &getName(
+    const MemberPtr &member
+  );
 
   bool operator==(
     const MemberPtr &other
@@ -126,6 +133,7 @@ private:
 using Members = std::vector<MemberPtr>;
 const Node *asNode(const MemberPtr &member);
 const Topic *asTopic(const MemberPtr &member);
+const std::string &getName(const MemberPtr &member);
 std::ostream &operator<<(std::ostream &stream, const MemberPtr &member);
 
 #define MAKE_MEMBER_PTR(it) MemberPtr(static_cast<Member *>(&((it)->instance)), &((it)->useCounter))

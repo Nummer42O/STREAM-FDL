@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 namespace cr = std::chrono;
+#include <iostream>
 
 
 class Graph
@@ -36,9 +37,13 @@ public:
   MemberProxies getOutgoing(
     const MemberPtr &member
   );
-
   MemberProxies getIncoming(
     const MemberPtr &member
+  );
+
+  friend std::ostream &operator<<(
+    std::ostream &stream,
+    const Graph &graph
   );
 
 private:
@@ -47,3 +52,4 @@ private:
 
   std::atomic<bool> mUpdateVisualisation;
 };
+std::ostream &operator<<(std::ostream &stream, const Graph &graph);

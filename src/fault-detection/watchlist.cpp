@@ -3,6 +3,7 @@
 #include "common.hpp"
 
 #include <algorithm>
+#include <thread>
 
 
 Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
@@ -30,11 +31,11 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
 
   const ScopeLock scopeLock(mMembersMutex);
 
-  InternalMembers::iterator it = std::find_if(
+  WatchlistMembers::iterator it = std::find_if(
     mMembers.begin(), mMembers.end(),
-    [&member](const InternalMembers::value_type &internalMember) -> bool
+    [&member](const WatchlistMembers::value_type &internalMember) -> bool
     {
-      return internalMember.first->mPrimaryKey == member.mPrimaryKey;
+      return internalMember.member->mPrimaryKey == member.mPrimaryKey;
     }
   );
   if (it != mMembers.end())
@@ -44,9 +45,7 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
   MemberPtr memberPtr = mpDataStore->get(member);
   assert(memberPtr.valid());
 
-  bool emplaced;
-  std::tie(it, emplaced) = mMembers.emplace(std::move(memberPtr), type);
-  assert(emplaced);
+  mMembers.emplace_back(std::move(memberPtr), type);
 }
 
 void Watchlist::addMember(MemberPtr member, WatchlistMemberType type)
@@ -55,42 +54,37 @@ void Watchlist::addMember(MemberPtr member, WatchlistMemberType type)
 
   const ScopeLock scopeLock(mMembersMutex);
 
-  InternalMembers::iterator it = std::find_if(
+  WatchlistMembers::iterator it = std::find_if(
     mMembers.begin(), mMembers.end(),
-    [&member](const InternalMembers::value_type &internalMember) -> bool
+    [&member](const WatchlistMembers::value_type &internalMember) -> bool
     {
-      return internalMember.first == member;
+      return internalMember.member == member;
     }
   );
   if (it == mMembers.end())
     return;
 
   LOG_TRACE("Adding member " << member << " to watchlist");
-  bool emplaced;
-  std::tie(it, emplaced) = mMembers.emplace(std::move(member), type);
-  assert(emplaced);
+  mMembers.emplace_back(std::move(member), type);
 }
 
-Members Watchlist::getMembers()
+void Watchlist::removeMember(const PrimaryKey &member)
+{
+  LOG_TRACE(LOG_THIS);
+
+  const ScopeLock scopedLock(mMembersMutex);
+
+  WatchlistMembers::iterator it = this->get(member);
+  if (it != mMembers.end())
+    mMembers.erase(it);
+}
+
+Watchlist::WatchlistMembers Watchlist::getMembers()
 {
   LOG_TRACE(LOG_THIS);
 
   const ScopeLock scopeLock(mMembersMutex);
-
-  tryInitialise();
-
-  Members output;
-  output.reserve(mMembers.size());
-  std::transform(
-    mMembers.begin(), mMembers.end(),
-    std::back_inserter(output),
-    [](const InternalMembers::value_type &element) -> Members::value_type
-    {
-      return element.first;
-    }
-  );
-
-  return output;
+  return mMembers;
 }
 
 bool Watchlist::contains(const PrimaryKey &member)
@@ -109,39 +103,37 @@ void Watchlist::reset()
   mMembers.clear();
 }
 
-bool Watchlist::notifyUsed(const PrimaryKey &member)
-{
-  LOG_TRACE(LOG_THIS LOG_VAR(member));
-  const ScopeLock scopedLock(mMembersMutex);
-
-  InternalMembers::iterator it = this->get(member);
-  if (it == mMembers.end() ||
-      it->second != TYPE_BLINDSPOT)
-    return false;
-
-  mMembers.erase(it);
-  return true;
-}
-
-void Watchlist::tryInitialise()
+void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
 {
   LOG_TRACE(LOG_THIS);
 
-  if (mInitialMemberNames.empty())
-    return;
-
-  for (auto it = mInitialMemberNames.begin(); it != mInitialMemberNames.end();)
+  Timestamp start, stop;
+  while (running.load() && !mInitialMemberNames.empty())
   {
-    MemberPtr node = mpDataStore->getNodeByName(*it);
-    if (!node.valid())
+    start = cr::system_clock::now();
+
+    for (auto it = mInitialMemberNames.begin(); it != mInitialMemberNames.end();)
     {
-      ++it;
-      continue;
+      MemberPtr node = mpDataStore->getNodeByName(*it);
+      if (!node.valid())
+      {
+        ++it;
+        continue;
+      }
+
+      const ScopeLock scopedLock(mMembersMutex);
+      mMembers.emplace_back(std::move(node), TYPE_INITIAL);
+      it = mInitialMemberNames.erase(it);
     }
 
-    mMembers.emplace(std::move(node), TYPE_INITIAL);
-    it = mInitialMemberNames.erase(it);
+    stop = cr::system_clock::now();
+    cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds remainingTime = loopTargetInterval - elapsedTime;
+    if (remainingTime.count() > 0)
+      std::this_thread::sleep_for(remainingTime);
   }
+
+  LOG_INFO("All initial watchlist members added to watchlist, stopping discovery.")
 }
 
 std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type)

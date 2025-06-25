@@ -38,7 +38,7 @@ public:
 private:
   void blindSpotCheck();
 
-  void expandSubgraph(
+  void extendSubgraph(
     const Alerts &newAlerts
   );
 

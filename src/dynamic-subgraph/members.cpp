@@ -85,3 +85,11 @@ const Topic *asTopic(const MemberPtr &member)
   assert(member.mpMember->mIsTopic);
   return static_cast<const Topic *>(member.mpMember);
 }
+
+const std::string &getName(const MemberPtr &member)
+{
+  if (member->mIsTopic)
+    return ::asTopic(member)->mName;
+  else
+    return ::asNode(member)->mName;
+}

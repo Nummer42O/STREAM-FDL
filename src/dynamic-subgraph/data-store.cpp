@@ -17,6 +17,7 @@ namespace cr = std::chrono;
 #include <unistd.h>
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 
 
 DataStore::DataStore(const json::json &config):
@@ -285,8 +286,10 @@ DataStore::GraphView DataStore::getFullGraphView() const
         return element.member.mPrimaryKey == fromPrimaryKey;
       }
     );
+
     LOG_TRACE("Adding sub connection from " << it->member << " to " << toPrimaryKey << "to graph");
     assert(it != output.end());
+
     it->connections.emplace_back(std::move(toPrimaryKey), false);
   }
   for (const json::json &pub: queryResponseData["pub"])
@@ -307,8 +310,10 @@ DataStore::GraphView DataStore::getFullGraphView() const
         return element.member.mPrimaryKey == fromPrimaryKey;
       }
     );
+
     LOG_TRACE("Adding pub connection from " << it->member << " to " << toPrimaryKey << "to graph");
     assert(it != output.end());
+
     it->connections.emplace_back(std::move(toPrimaryKey), true);
   }
   for (const json::json &send: queryResponseData["send"])
@@ -326,8 +331,10 @@ DataStore::GraphView DataStore::getFullGraphView() const
         return element.member.mPrimaryKey == fromPrimaryKey;
       }
     );
+
     LOG_TRACE("Adding send connection from " << it->member << " to " << toPrimaryKey << "to graph");
     assert(it != output.end());
+
     it->connections.emplace_back(std::move(toPrimaryKey), false);
   }
 
@@ -446,6 +453,7 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
   {
     start = cr::system_clock::now();
 
+    /*
     for (Nodes::iterator it = mNodes.begin(); it != mNodes.end();)
     {
       if (it->useCounter.nonZero())
@@ -455,11 +463,12 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       }
 
       LOG_TRACE("Removing " << it->instance << "from data store");
-      UnsubscribeRequest req{.id = it->requestId};
-      requestId_t unsubReqId;
+      //! NOTE: not yet implemented in datamgmt
+      // UnsubscribeRequest req{.id = it->requestId};
+      // requestId_t unsubReqId;
 
-      const ScopeLock scopedLock(mNodesMutex);
-      mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      // const ScopeLock scopedLock(mNodesMutex);
+      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
       it = mNodes.erase(it);
     }
     for (Topics::iterator it = mTopics.begin(); it != mTopics.end();)
@@ -471,13 +480,15 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       }
 
       LOG_TRACE("Removing " << it->instance << "from data store");
-      UnsubscribeRequest req{.id = it->requestId};
-      requestId_t unsubReqId;
+      //! NOTE: not yet implemented in datamgmt
+      // UnsubscribeRequest req{.id = it->requestId};
+      // requestId_t unsubReqId;
 
-      const ScopeLock scopedLock(mTopicsMutex);
-      mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      // const ScopeLock scopedLock(mTopicsMutex);
+      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
       it = mTopics.erase(it);
     }
+    */
 
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);
     if (publishersToUpdate.has_value())
@@ -573,6 +584,7 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
         LOG_ERROR("No node with " LOG_VAR(primaryKey) " in data store, ignoring update");
     }
     //! NOTE: NodeTimerToUpdate not currently regarded
+    mIpcClient.receiveNodeTimerToUpdate(false);
     std::optional<NodeStateUpdate> stateUpdate = mIpcClient.receiveNodeStateUpdate(false);
     if (stateUpdate.has_value())
     {
@@ -620,7 +632,8 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
     }
 
     stop = cr::system_clock::now();
-    cr::milliseconds remainingTime = loopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds remainingTime = loopTargetInterval - elapsedTime;
     if (remainingTime.count() > 0)
       std::this_thread::sleep_for(remainingTime);
   }

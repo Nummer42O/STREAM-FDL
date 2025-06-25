@@ -4,6 +4,7 @@
 
 #include <thread>
 using namespace std::chrono_literals;
+#include <iostream>
 
 
 DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
@@ -27,11 +28,13 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
 
+  std::thread watchlist(&Watchlist::run, &mWatchlist, std::cref(running), cmLoopTargetInterval);
   std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running), cmLoopTargetInterval);
   std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running), cmLoopTargetInterval);
 
   Timestamp start, stop;
+  Timestamp runtimeStart = cr::system_clock::now();
   while (running.load())
   {
     start = cr::system_clock::now();
@@ -62,12 +65,15 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
     }
 
     Alerts emittedAlerts = mFD.getEmittedAlerts();
-    LOG_INFO("Got " << emittedAlerts.size() << " alerts.");
-    if (!emittedAlerts.empty())
-      expandSubgraph(emittedAlerts);
-    if (checkAbortCirteria(emittedAlerts))
+    LOG_INFO("Emitted alerts: " << emittedAlerts)
+    if (this->checkAbortCirteria(emittedAlerts))
     {
       LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
+
+      //! NOTE: temporary, remove later
+      std::cout << "Runtime: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - runtimeStart).count() << "ms\n";
+      std::exit(0);
+
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
       mWatchlist.reset();
@@ -78,16 +84,21 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
       Alerts lastAlerts = mFD.getEmittedAlerts();
       std::move(lastAlerts.begin(), lastAlerts.end(), std::back_inserter(emittedAlerts));
     }
+    //! NOTE: updating the graph after the break condition check as updating before would cause the new alert rate to stay at 0 permanently
+    if (!emittedAlerts.empty())
+      this->extendSubgraph(emittedAlerts);
 
     //! TODO: std::move emittedAlerts into FTE-Alert-DB
 
     stop = cr::system_clock::now();
-    cr::milliseconds remainingTime = cmLoopTargetInterval - cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds remainingTime = cmLoopTargetInterval - elapsedTime;
     if (remainingTime.count() > 0)
       std::this_thread::sleep_for(remainingTime);
   }
   LOG_INFO("Dynamic Subgraph Builder mainloop terminated.");
 
+  watchlist.join();
   faultDetection.join();
   dataStore.join();
   visualisation.join();
@@ -171,16 +182,23 @@ void DynamicSubgraphBuilder::blindSpotCheck()
     mWatchlist.addMember(member, Watchlist::TYPE_BLINDSPOT);
 }
 
-void DynamicSubgraphBuilder::expandSubgraph(const Alerts &newAlerts)
+void DynamicSubgraphBuilder::extendSubgraph(const Alerts &newAlerts)
 {
   LOG_TRACE(LOG_THIS);
 
   for (const Alert &alert: newAlerts)
   {
     if (mSAG.add(alert.member))
-      for (const MemberProxy &incomingMember: mSAG.getIncoming(alert.member))
+    {
+      MemberProxies incoming = mSAG.getIncoming(alert.member);
+      LOG_DEBUG("Incoming members for " << alert.member << ": " << incoming);
+      for (const MemberProxy &incomingMember: incoming)
         mWatchlist.addMember(incomingMember);
+    }
+    else
+      LOG_DEBUG("Graph already contains " << alert.member);
   }
+  LOG_DEBUG(LOG_VAR(mSAG));
   mSAG.updateVisualisation();
 }
 
@@ -188,12 +206,16 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
 {
   LOG_TRACE(LOG_THIS);
 
-  size_t nrNewAlerts = newAlerts.size();
+  size_t nrNewAlerts = 0ul;
+  for (const Alert &alert: newAlerts)
+    if (!mSAG.contains(MemberProxy(alert.member->mPrimaryKey, alert.member->mIsTopic)))
+      ++nrNewAlerts;
   mLastNrAlerts.push(nrNewAlerts);
 
   // get average ammount of new alerts
   double meanNewAlerts = mLastNrAlerts.getMean();
   LOG_DEBUG(LOG_VAR(nrNewAlerts) LOG_VAR(meanNewAlerts) LOG_VAR(mSomethingIsGoingOn));
+  std::cout << "New alerts: " << nrNewAlerts << " -> " << meanNewAlerts << '\n';
 
   // if we currently are not investigating any failure…
   if (!mSomethingIsGoingOn)

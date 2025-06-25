@@ -33,7 +33,7 @@ namespace fs = std::filesystem;
 #define CONFIG_TIMED_FAULTS                     "timed-faults"
 #define   CONFIG_MEMBER_NAME                    "name"
 #define   CONFIG_MEMBER_TIMEOUT                 "timeout-s"
-#define CONFIG_TARGET_FREQUENCY                 "target-frequency"
+#define CONFIG_TARGET_FREQUENCY                 "target-frequency-hz"
 
 
 #define _LOG_LEVEL_TRACE  0
