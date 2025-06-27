@@ -16,7 +16,7 @@ CircularBuffer::CircularBuffer(size_t maxSize):
   assert(mMaxSize >= 2);
   LOG_TRACE(LOG_THIS LOG_VAR(maxSize));
 
-  mCurrent = &mBuffer[maxSize];
+  mCurrent = &mBuffer[mMaxSize];
 }
 
 CircularBuffer::CircularBuffer(const CircularBuffer &other):
@@ -73,7 +73,7 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 
   if (mSize < mMaxSize)
     ++mSize;
-  if (mCurrent == this->end())
+  if (mCurrent == this->absoluteEnd())
     mCurrent = mBuffer.get();
   else
     ++mCurrent;
@@ -81,6 +81,12 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
   *mCurrent = value;
 
   return mCurrent;
+}
+
+void CircularBuffer::reset()
+{
+  mSize = 0ul;
+  mCurrent = &mBuffer[mMaxSize];
 }
 
 CircularBuffer::value_type &CircularBuffer::at(index_type i)

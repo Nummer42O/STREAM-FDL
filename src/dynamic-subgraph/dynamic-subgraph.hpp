@@ -37,6 +37,10 @@ public:
   );
 
 private:
+  void runUpdateCycle(
+    const std::atomic<bool> &running
+  );
+
   void blindSpotCheck();
 
   void extendSubgraph(
@@ -54,6 +58,8 @@ private:
   Graph                     mSAG;
   DataStore::Ptr            mpDataStore;
   DataStore::SharedMemory   mCpuUtilisationSource;
+
+  Timestamp                 mRuntimeStart;
 
   bool                      mSomethingIsGoingOn;
   CircularBuffer            mLastNrAlerts;

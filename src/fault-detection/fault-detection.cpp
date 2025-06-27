@@ -78,6 +78,7 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
       else
         ++it;
     }
+    mHasNewAlerts.notify_all();
 
     stop = cr::system_clock::now();
     cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
@@ -91,10 +92,10 @@ FaultDetection::Alerts FaultDetection::getEmittedAlerts()
 {
   LOG_TRACE(LOG_THIS);
 
-  const ScopeLock scopeLock(mAlertMutex);
+  std::unique_lock<std::mutex> scopeLock(mAlertMutex);
+  mHasNewAlerts.wait(scopeLock);
 
   Alerts output = mAlerts;
-  //! TODO: add to DB
   mAlerts.clear();
   return output;
 }

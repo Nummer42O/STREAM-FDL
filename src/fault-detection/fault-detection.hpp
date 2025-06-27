@@ -15,6 +15,7 @@ namespace json = nlohmann;
 #include <chrono>
 namespace cr = std::chrono;
 #include <iostream>
+#include <condition_variable>
 
 
 struct Alert
@@ -55,10 +56,8 @@ public:
   );
 
   Alerts getEmittedAlerts();
-  void reset()
-  {
-    mMovingWindow.clear();
-  }
+
+  void reset() { mMovingWindow.clear(); }
 
 private:
   AttributeWindow createAttrWindow(
@@ -83,6 +82,7 @@ private:
 private:
   Alerts mAlerts;
   std::mutex mAlertMutex;
+  std::condition_variable mHasNewAlerts;
   MemberWindow mMovingWindow;
   FaultMapping mFaultMapping;
 

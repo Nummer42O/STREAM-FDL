@@ -29,6 +29,7 @@ public:
   iterator push(
     value_type value
   );
+  void reset();
 
   value_type &at(
     index_type i
@@ -38,7 +39,7 @@ public:
   ) { return mBuffer[i]; }
 
   const_iterator begin() const { return mBuffer.get(); }
-  const_iterator end() const { return &mBuffer[mMaxSize]; }
+  const_iterator end() const { return &mBuffer[mSize]; }
   const_iterator current() const { return mCurrent; }
   const_iterator current(ptrdiff_t offset) const;
 
@@ -51,6 +52,9 @@ public:
   double getStdDev(
     double mean
   ) const;
+
+private:
+  const_iterator absoluteEnd() const { return &mBuffer[mMaxSize]; }
 
 private:
   size_t mMaxSize;

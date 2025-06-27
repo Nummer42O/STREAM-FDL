@@ -28,14 +28,13 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
 void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
+  mRuntimeStart = cr::system_clock::now();
 
+  std::thread updates(&DynamicSubgraphBuilder::runUpdateCycle, this, std::cref(running));
   std::thread watchlist(&Watchlist::run, &mWatchlist, std::cref(running), cmLoopTargetInterval);
   std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running), cmLoopTargetInterval);
   std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running), cmLoopTargetInterval);
-
-  Timestamp start, stop;
-  Timestamp runtimeStart = cr::system_clock::now();
 
   if (cmRunHolistic)
   {
@@ -44,6 +43,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
       mWatchlist.addMember(proxy);
   }
 
+  Timestamp start, stop;
   while (running.load())
   {
     start = cr::system_clock::now();
@@ -76,6 +76,28 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
       }
     }
 
+    stop = cr::system_clock::now();
+    cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
+    cr::milliseconds remainingTime = cmLoopTargetInterval - elapsedTime;
+    if (remainingTime.count() > 0)
+      std::this_thread::sleep_for(remainingTime);
+  }
+  LOG_INFO("Dynamic Subgraph Builder mainloop terminated.");
+
+  updates.join();
+  watchlist.join();
+  faultDetection.join();
+  dataStore.join();
+  visualisation.join();
+}
+
+void DynamicSubgraphBuilder::runUpdateCycle(const std::atomic<bool> &running)
+{
+  Timestamp start, stop;
+  while (running.load())
+  {
+    start = cr::system_clock::now();
+
     Alerts emittedAlerts = mFD.getEmittedAlerts();
     LOG_INFO("Emitted alerts: " << emittedAlerts)
     if (this->checkAbortCirteria(emittedAlerts))
@@ -83,8 +105,8 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
       LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
 
       //! NOTE: temporary, remove later
-      std::cout << "Runtime: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - runtimeStart).count() << "ms\n";
-      break;
+      std::cout << "Runtime: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << "ms\n";
+      std::exit(0);
 
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
@@ -108,12 +130,6 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
     if (remainingTime.count() > 0)
       std::this_thread::sleep_for(remainingTime);
   }
-  LOG_INFO("Dynamic Subgraph Builder mainloop terminated.");
-
-  watchlist.join();
-  faultDetection.join();
-  dataStore.join();
-  visualisation.join();
 }
 
 static void getBlindspotsInternal(
@@ -222,6 +238,12 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   for (const Alert &alert: newAlerts)
     if (!mSAG.contains(MemberProxy(alert.member->mPrimaryKey, alert.member->mIsTopic)))
       ++nrNewAlerts;
+
+  if (!mSomethingIsGoingOn && nrNewAlerts > 0)
+  {
+    mSomethingIsGoingOn = true;
+    mLastNrAlerts.reset();
+  }
   mLastNrAlerts.push(nrNewAlerts);
 
   // get average ammount of new alerts
@@ -229,15 +251,5 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   LOG_DEBUG(LOG_VAR(nrNewAlerts) LOG_VAR(meanNewAlerts) LOG_VAR(mSomethingIsGoingOn));
   std::cout << "New alerts: " << nrNewAlerts << " -> " << meanNewAlerts << '\n';
 
-  // if we currently are not investigating any failure…
-  if (!mSomethingIsGoingOn)
-  {
-    // …check whether the mean exceeds the threshold, i.e. we start building the subgraph
-    if (meanNewAlerts > 0.0)
-      mSomethingIsGoingOn = true;
-    // regardless of the above, in this state we definetly won't abort as there is nothing to abort yet
-    return false;
-  }
-  // if we are investigating a failure, return wether the mean has dropped below the threshold
-  return (meanNewAlerts <= cmAbortionCriteriaThreshold);
+  return (mSomethingIsGoingOn && meanNewAlerts <= cmAbortionCriteriaThreshold);
 }
