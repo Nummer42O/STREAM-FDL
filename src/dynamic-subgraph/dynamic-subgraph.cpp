@@ -7,7 +7,7 @@ using namespace std::chrono_literals;
 #include <iostream>
 
 
-DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr):
+DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr, bool runHolistic):
   mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
   mFD(config, &mWatchlist),
   mpDataStore(dataStorePtr),
@@ -17,7 +17,8 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
   cmLoopTargetInterval(cr::duration_cast<cr::milliseconds>(1s / config.at(CONFIG_TARGET_FREQUENCY).get<double>())),
   cmBlindspotInterval(config.at(CONFIG_BLINDSPOT_INTERVAL).get<size_t>()),
   cmAbortionCriteriaThreshold(config.at(CONFIG_ALERT_RATE).at(CONFIG_ABORTION_CRITERIA_THRESHOLD).get<double>()),
-  cmMaximumCpuUtilisation(config.at(CONFIG_BLINDSPOT_CPU_THRESHOLD).get<double>())
+  cmMaximumCpuUtilisation(config.at(CONFIG_BLINDSPOT_CPU_THRESHOLD).get<double>()),
+  cmRunHolistic(runHolistic)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(dataStorePtr));
 
@@ -36,28 +37,30 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
   Timestamp start, stop;
   Timestamp runtimeStart = cr::system_clock::now();
 
-  MemberProxies proxies = mpDataStore->getAllMembers();
-  for (const MemberProxy &proxy: proxies)
-    mWatchlist.addMember(proxy);
-
-  std::cout << "hello world!\n";
+  if (cmRunHolistic)
+  {
+    MemberProxies proxies = mpDataStore->getAllMembers();
+    for (const MemberProxy &proxy: proxies)
+      mWatchlist.addMember(proxy);
+  }
 
   while (running.load())
   {
     start = cr::system_clock::now();
 
-    /*
-    sharedMem::Response resp = MAKE_RESPONSE;
-    mCpuUtilisationSource.receive(resp);
-    assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
-    assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
-    double cpuUtilisation = resp.numerical.value;
+    if (!cmRunHolistic)
+    {
+      sharedMem::Response resp = MAKE_RESPONSE;
+      mCpuUtilisationSource.receive(resp);
+      assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
+      assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
+      double cpuUtilisation = resp.numerical.value;
 
-    LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
-    if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
-      blindSpotCheck();
-    mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
-    */
+      LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
+      if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
+        blindSpotCheck();
+      mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
+    }
 
     DataStore::GraphView updates = mpDataStore->getUpdates();
     LOG_INFO("Got " << updates.size() << " updates.");
@@ -81,7 +84,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
       //! NOTE: temporary, remove later
       std::cout << "Runtime: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - runtimeStart).count() << "ms\n";
-      std::exit(0);
+      break;
 
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();

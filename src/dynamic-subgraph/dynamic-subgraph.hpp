@@ -28,7 +28,8 @@ public:
    */
   DynamicSubgraphBuilder(
     const json::json &config,
-    DataStore::Ptr dataStorePtr
+    DataStore::Ptr dataStorePtr,
+    bool runHolistic
   );
 
   void run(
@@ -62,4 +63,5 @@ private:
   const size_t              cmBlindspotInterval;
   const double              cmAbortionCriteriaThreshold;
   const double              cmMaximumCpuUtilisation;
+  const bool                cmRunHolistic;
 };

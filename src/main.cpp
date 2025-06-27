@@ -14,6 +14,9 @@ namespace fs = std::filesystem;
 #include <csignal>
 #include <atomic>
 
+#define MODE_NORMAL   "--normal"
+#define MODE_HOLISTIC "--holistic"
+
 
 static std::atomic<bool> gIsRunning;
 void sigintHandler(int signum)
@@ -24,15 +27,29 @@ void sigintHandler(int signum)
 
 int main(int argc, char *argv[])
 {
-  if (argc != 2)
+  if (argc != 3)
   {
     std::cerr <<
-      "Invalid number of arguments (" << argc << ").\n"
-      "Usage: " << argv[0] << " CONFIGURATION_FILE\n";
+      "Invalid number of arguments " << argc - 1 << ", expected 2.\n"
+      "Usage: " << argv[0] << " (" MODE_NORMAL "|" MODE_HOLISTIC ") CONFIGURATION_FILE\n";
     return 1;
   }
 
-  fs::path configFilePath(argv[1]);
+  const char *mode = argv[1];
+  bool runHolistic;
+  if (std::strcmp(mode, MODE_HOLISTIC) == 0)
+    runHolistic = true;
+  else if (std::strcmp(mode, MODE_NORMAL) == 0)
+    runHolistic = false;
+  else
+  {
+    std::cerr <<
+      "Invalid argument '" << mode << "', use " MODE_NORMAL " or " MODE_HOLISTIC ".\n"
+      "Usage: " << argv[0] << " (" MODE_NORMAL "|" MODE_HOLISTIC ") CONFIGURATION_FILE\n";
+    return 1;
+  }
+
+  fs::path configFilePath(argv[2]);
   if (!fs::is_regular_file(configFilePath) ||
       configFilePath.extension() != ".json")
   {
@@ -56,7 +73,7 @@ int main(int argc, char *argv[])
 
   {
     DataStore dataStore(config);
-    DynamicSubgraphBuilder dsg(config, &dataStore);
+    DynamicSubgraphBuilder dsg(config, &dataStore, runHolistic);
     LOG_TRACE("Initialised DataStore and DSG.");
 
     sighandler_t intHandler = signal(SIGINT, sigintHandler);
