@@ -60,6 +60,7 @@ public:
   ) { return (proxy.mIsTopic ? getTopic(proxy.mPrimaryKey) : getNode(proxy.mPrimaryKey)); }
 
   GraphView getFullGraphView() const;
+  MemberProxies getAllMembers() const;
   SharedMemory getCpuUtilisationMemory() const;
 
   void addSubUpdate(

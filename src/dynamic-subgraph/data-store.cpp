@@ -373,6 +373,65 @@ DataStore::SharedMemory DataStore::getCpuUtilisationMemory() const
   return SharedMemory(util::parseString(singleAttrResp.memAddress));
 }
 
+MemberProxies DataStore::getAllMembers() const
+{
+  LOG_TRACE(LOG_THIS);
+
+  // send a request for the whole graph structure
+  CustomMemberRequest req{
+    .query = {
+      {'O', 'P', 'T', 'I', 'O', 'N', 'A', 'L', ' ', 'M', 'A', 'T', 'C', 'H', ' ', '(', 'a', ':', 'A', 'c', 't', 'i', 'v', 'e', ')', ' ', 'W', 'H', 'E', 'R', 'E', ' ', '(', 'a', ')', '-', '[', ':', 'p', 'u', 'b', 'l', 'i', 's', 'h', 'i', 'n', 'g', ']', '-', '>', '(', ')', ' ', 'O', 'R', ' ', '(', ')', '-', '[', ':', 's', 'u'},
+      {'b', 's', 'c', 'r', 'i', 'b', 'i', 'n', 'g', ']', '-', '>', '(', 'a', ')', ' ', 'O', 'R', ' ', '(', 'a', ')', '-', '[', ':', 's', 'e', 'n', 'd', 'i', 'n', 'g', ']', '-', '>', '(', ')', ' ', 'O', 'R', ' ', '(', ')', '-', '[', ':', 's', 'e', 'n', 'd', 'i', 'n', 'g', ']', '-', '>', '(', 'a', ')', ' ', 'O', 'R', ' ', '('},
+      {'a', ')', '-', '[', ':', 't', 'i', 'm', 'e', 'r', ']', '-', '>', '(', ')', ' ', 'W', 'I', 'T', 'H', ' ', 'a', ' ', 'O', 'P', 'T', 'I', 'O', 'N', 'A', 'L', ' ', 'M', 'A', 'T', 'C', 'H', ' ', '(', 'p', ':', 'P', 'a', 's', 's', 'i', 'v', 'e', ')', ' ', 'W', 'H', 'E', 'R', 'E', ' ', '(', ')', '-', '[', ':', 'p', 'u', 'b'},
+      {'l', 'i', 's', 'h', 'i', 'n', 'g', ']', '-', '>', '(', 'p', ')', ' ', 'O', 'R', ' ', '(', 'p', ')', '-', '[', ':', 's', 'u', 'b', 's', 'c', 'r', 'i', 'b', 'i', 'n', 'g', ']', '-', '>', '(', ')', ' ', 'W', 'I', 'T', 'H', ' ', 'a', ',', 'p', ' ', 'R', 'E', 'T', 'U', 'R', 'N', ' ', '{', 'a', 'c', 't', 'i', 'v', 'e', ':'},
+      {' ', 'c', 'o', 'l', 'l', 'e', 'c', 't', '(', 'D', 'I', 'S', 'T', 'I', 'N', 'C', 'T', ' ', 'a', ')', ',', ' ', 'p', 'a', 's', 's', 'i', 'v', 'e', ':', ' ', 'c', 'o', 'l', 'l', 'e', 'c', 't', '(', 'D', 'I', 'S', 'T', 'I', 'N', 'C', 'T', ' ', 'p', ')', '}', ' ', 'A', 'S', ' ', 'r', 'e', 's', 'u', 'l', 't', '\0'},
+      {'\0'}
+    },
+    .continuous = false
+  };
+  requestId_t requestId;
+  mIpcClient.sendCustomMemberRequest(req, requestId);
+  CustomMemberResponse resp = mIpcClient.receiveCustomMemberResponse().value();
+  assert(resp.requestID == requestId);
+  LOG_TRACE(LOG_VAR(resp.memAddress));
+
+  // puzzle together query response from textual responses
+  std::string queryResponseString;
+  sharedMem::SHMChannel<sharedMem::Response> channel(resp.memAddress, false);
+  sharedMem::Response response = MAKE_RESPONSE;
+  size_t previousNumber = 0;
+  do {
+    channel.receive(response);
+    assert(response.header.type == sharedMem::ResponseType::TEXTUAL);
+    assert(previousNumber < response.textual.number);
+    previousNumber = response.textual.number;
+    if (response.textual.number % 10 == 0)
+      LOG_DEBUG("Receiving package " << response.textual.number << '/' << response.textual.total);
+
+    std::string responseLine = util::parseString(response.textual.line);
+    std::move(responseLine.begin(), responseLine.end(), std::back_inserter(queryResponseString));
+  } while (response.textual.number < response.textual.total);
+  LOG_TRACE("Full query response: " << queryResponseString);
+
+  // load query response as json and navigate to data of interest
+  json::json queryResponseData = json::json::parse(queryResponseString);
+  queryResponseData = queryResponseData.at("results");
+  queryResponseData = queryResponseData.at(0);
+  queryResponseData = queryResponseData.at("data");
+  queryResponseData = queryResponseData.at(0);
+  queryResponseData = queryResponseData.at("row");
+  queryResponseData = queryResponseData.at(0);
+  assert(queryResponseData.is_object());
+
+  MemberProxies members;
+  for (const json::json &active: queryResponseData.at("active"))
+    members.emplace_back(active.at("primaryKey").get<std::string>(), false);
+  for (const json::json &passive: queryResponseData.at("passive"))
+    members.emplace_back(passive.at("primaryKey").get<std::string>(), true);
+
+  return members;
+}
+
 void DataStore::addSubUpdate(Nodes::iterator affected, PrimaryKey other)
 {
   const ScopeLock scopedLock(mUpdatesMutex);
