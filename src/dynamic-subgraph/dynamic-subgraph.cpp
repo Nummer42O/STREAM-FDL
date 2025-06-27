@@ -35,10 +35,18 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 
   Timestamp start, stop;
   Timestamp runtimeStart = cr::system_clock::now();
+
+  MemberProxies proxies = mpDataStore->getAllMembers();
+  for (const MemberProxy &proxy: proxies)
+    mWatchlist.addMember(proxy);
+
+  std::cout << "hello world!\n";
+
   while (running.load())
   {
     start = cr::system_clock::now();
 
+    /*
     sharedMem::Response resp = MAKE_RESPONSE;
     mCpuUtilisationSource.receive(resp);
     assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
@@ -49,6 +57,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
     if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
       blindSpotCheck();
     mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
+    */
 
     DataStore::GraphView updates = mpDataStore->getUpdates();
     LOG_INFO("Got " << updates.size() << " updates.");
