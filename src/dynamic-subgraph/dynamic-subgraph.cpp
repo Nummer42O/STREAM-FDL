@@ -221,7 +221,7 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   if (!mSomethingIsGoingOn)
   {
     // …check whether the mean exceeds the threshold, i.e. we start building the subgraph
-    if (meanNewAlerts > cmAbortionCriteriaThreshold)
+    if (meanNewAlerts > 0.0)
       mSomethingIsGoingOn = true;
     // regardless of the above, in this state we definetly won't abort as there is nothing to abort yet
     return false;

@@ -155,6 +155,14 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
   return !oAlert.affectedAttributes.empty();
   */
 
+  //! NOTE: dummy payload
+
+  Timestamp start = cr::system_clock::now();
+  while (cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() < 10)
+  {
+    std::this_thread::sleep_for(cr::microseconds(10));
+  }
+
   const std::string &name = ::getName(member);
   FaultMapping::iterator it = mFaultMapping.find(name);
   if (it == mFaultMapping.end())
