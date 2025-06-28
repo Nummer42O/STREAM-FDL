@@ -25,12 +25,12 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
   mCpuUtilisationSource = mpDataStore->getCpuUtilisationMemory();
 }
 
-void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
+void DynamicSubgraphBuilder::run(std::atomic<bool> &running)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
   mRuntimeStart = cr::system_clock::now();
 
-  std::thread updates(&DynamicSubgraphBuilder::runUpdateCycle, this, std::cref(running));
+  std::thread updates(&DynamicSubgraphBuilder::runUpdateCycle, this, std::ref(running));
   std::thread watchlist(&Watchlist::run, &mWatchlist, std::cref(running), cmLoopTargetInterval);
   std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running), cmLoopTargetInterval);
@@ -48,19 +48,19 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
   {
     start = cr::system_clock::now();
 
-    if (!cmRunHolistic)
-    {
-      sharedMem::Response resp = MAKE_RESPONSE;
-      mCpuUtilisationSource.receive(resp);
-      assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
-      assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
-      double cpuUtilisation = resp.numerical.value;
+    // if (!cmRunHolistic)
+    // {
+    //   sharedMem::Response resp = MAKE_RESPONSE;
+    //   mCpuUtilisationSource.receive(resp);
+    //   assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
+    //   assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
+    //   double cpuUtilisation = resp.numerical.value;
 
-      LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
-      if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
-        blindSpotCheck();
-      mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
-    }
+    //   LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
+    //   if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
+    //     blindSpotCheck();
+    //   mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
+    // }
 
     DataStore::GraphView updates = mpDataStore->getUpdates();
     LOG_INFO("Got " << updates.size() << " updates.");
@@ -91,7 +91,7 @@ void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
   visualisation.join();
 }
 
-void DynamicSubgraphBuilder::runUpdateCycle(const std::atomic<bool> &running)
+void DynamicSubgraphBuilder::runUpdateCycle(std::atomic<bool> &running)
 {
   Timestamp start, stop;
   while (running.load())
@@ -99,14 +99,15 @@ void DynamicSubgraphBuilder::runUpdateCycle(const std::atomic<bool> &running)
     start = cr::system_clock::now();
 
     Alerts emittedAlerts = mFD.getEmittedAlerts();
-    LOG_INFO("Emitted alerts: " << emittedAlerts)
+    LOG_DEBUG("Emitted alerts: " << emittedAlerts);
     if (this->checkAbortCirteria(emittedAlerts))
     {
       LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
 
       //! NOTE: temporary, remove later
-      std::cout << "Runtime: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << "ms\n";
-      std::exit(0);
+      std::cout << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << '\n';
+      running = false;
+      return;
 
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
@@ -249,7 +250,14 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   // get average ammount of new alerts
   double meanNewAlerts = mLastNrAlerts.getMean();
   LOG_DEBUG(LOG_VAR(nrNewAlerts) LOG_VAR(meanNewAlerts) LOG_VAR(mSomethingIsGoingOn));
-  std::cout << "New alerts: " << nrNewAlerts << " -> " << meanNewAlerts << '\n';
 
-  return (mSomethingIsGoingOn && meanNewAlerts <= cmAbortionCriteriaThreshold);
+  if (mFD.mFaultMapping.size() != mSAG.size())
+    return false;
+
+  for (const auto &[name, _]: mFD.mFaultMapping)
+    if (!mSAG.contains(name))
+      return false;
+  return true;
+
+  // return (mSomethingIsGoingOn && meanNewAlerts <= cmAbortionCriteriaThreshold);
 }

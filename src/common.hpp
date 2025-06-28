@@ -189,3 +189,20 @@ public:
 private:
   std::mutex &mrMutex;
 };
+
+class ScopeTimer
+{
+public:
+  ScopeTimer(const char *name):
+    mName(name),
+    mStart(cr::system_clock::now())
+  {}
+  ~ScopeTimer()
+  {
+    std::cout << "Timer " << mName << ": " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mStart).count() << "ms\n";
+  }
+
+private:
+  const char *mName;
+  Timestamp mStart;
+};

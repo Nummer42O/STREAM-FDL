@@ -29,43 +29,7 @@ void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
     return;
   }
 
-  const ScopeLock scopeLock(mMembersMutex);
-
-  WatchlistMembers::iterator it = std::find_if(
-    mMembers.begin(), mMembers.end(),
-    [&member](const WatchlistMembers::value_type &internalMember) -> bool
-    {
-      return internalMember.member->mPrimaryKey == member.mPrimaryKey;
-    }
-  );
-  if (it != mMembers.end())
-    return;
-
-  LOG_TRACE("Adding member " << member << " to watchlist");
-  MemberPtr memberPtr = mpDataStore->get(member);
-  assert(memberPtr.valid());
-
-  mMembers.emplace_back(std::move(memberPtr), type);
-}
-
-void Watchlist::addMember(MemberPtr member, WatchlistMemberType type)
-{
-  LOG_TRACE(LOG_THIS << member << " type: " << type);
-
-  const ScopeLock scopeLock(mMembersMutex);
-
-  WatchlistMembers::iterator it = std::find_if(
-    mMembers.begin(), mMembers.end(),
-    [&member](const WatchlistMembers::value_type &internalMember) -> bool
-    {
-      return internalMember.member == member;
-    }
-  );
-  if (it == mMembers.end())
-    return;
-
-  LOG_TRACE("Adding member " << member << " to watchlist");
-  mMembers.emplace_back(std::move(member), type);
+  std::thread(&Watchlist::addMemberInteral, this, member, type).detach();
 }
 
 void Watchlist::removeMember(const PrimaryKey &member)
@@ -114,6 +78,22 @@ void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
 
     for (auto it = mInitialMemberNames.begin(); it != mInitialMemberNames.end();)
     {
+      LOG_TRACE("Trying to add " << *it << " to watchlist.");
+
+      WatchlistMembers::iterator memberIt;
+      {
+        const ScopeLock scopeLock(mMembersMutex);
+        memberIt = this->get(*it);
+      }
+      if (memberIt != mMembers.end())
+      {
+        if (memberIt->type == TYPE_BLINDSPOT)
+          memberIt->type = TYPE_INITIAL;
+        else
+          LOG_DEBUG(*it << " already in watchlist, skipping.");
+        it = mInitialMemberNames.erase(it);
+      }
+
       MemberPtr node = mpDataStore->getNodeByName(*it);
       if (!node.valid())
       {
@@ -121,8 +101,10 @@ void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
         continue;
       }
 
-      const ScopeLock scopedLock(mMembersMutex);
-      mMembers.emplace_back(std::move(node), TYPE_INITIAL);
+      {
+        const ScopeLock scopedLock(mMembersMutex);
+        mMembers.emplace_back(std::move(node), TYPE_INITIAL);
+      }
       it = mInitialMemberNames.erase(it);
     }
 
@@ -133,7 +115,38 @@ void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       std::this_thread::sleep_for(remainingTime);
   }
 
-  LOG_INFO("All initial watchlist members added to watchlist, stopping discovery.")
+  LOG_INFO("Exiting watchlist loop.")
+}
+
+void Watchlist::addMemberInteral(MemberProxy member, WatchlistMemberType type)
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(member) LOG_VAR(type));
+
+  Timestamp start = cr::system_clock::now();
+  {
+    const ScopeLock scopeLock(mMembersMutex);
+    auto it = this->get(member.mPrimaryKey);
+    if (it != mMembers.end())
+    {
+      if (it->type == TYPE_BLINDSPOT)
+        it->type = type;
+      LOG_DEBUG(member << " already in watchlist, updated type.");
+      return;
+    }
+  }
+  std::cout << "checking existence took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
+  LOG_TRACE("Adding " << member << " to watchlist.");
+
+  start = cr::system_clock::now();
+  MemberPtr node = mpDataStore->get(member);
+  std::cout << "getting member took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
+
+  start = cr::system_clock::now();
+  {
+    const ScopeLock scopedLock(mMembersMutex);
+    mMembers.emplace_back(std::move(node), type);
+  }
+  std::cout << "emplacing member took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
 }
 
 std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type)
@@ -153,5 +166,11 @@ std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberT
     stream << "<unknown>";
   }
 
+  return stream;
+}
+
+std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMember &member)
+{
+  stream << "WLM(" << member.member << ", " << member.type << ')';
   return stream;
 }

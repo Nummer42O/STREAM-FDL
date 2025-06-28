@@ -30,7 +30,7 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
 
     // retrieve all members currently on the watchlist
     Watchlist::WatchlistMembers currentWatchlistMembers = mcpWatchlist->getMembers();
-    // LOG_DEBUG("\nCurrent watchlist: " << currentWatchlistMembers);
+    LOG_DEBUG("\nCurrent watchlist: " << currentWatchlistMembers);
     // add their attributes to the moving window
     for (InternalMember &wlMember: currentWatchlistMembers)
     {
@@ -47,15 +47,6 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
     for (MemberWindow::iterator it = mMovingWindow.begin(); it != mMovingWindow.end();)
     {
       const auto &[wlMember, attributeWindow] = *it;
-      // if there ain't enough attribute values, skip
-      //! NOTE: the first attribute is selected as representing all, since all
-      //!       attribute buffers for one member theoretically grow in parallel
-      if (!attributeWindow.begin()->second.full())
-      {
-        LOG_DEBUG("Attribute window of " << wlMember.member << " has status: " << attributeWindow.begin()->second.size() << '/' << attributeWindow.begin()->second.maxSize());
-        ++it;
-        continue;
-      }
 
       // check if there is a fault
       Alert alert;
@@ -122,7 +113,20 @@ void FaultDetection::updateAttrWindow(AttributeWindow &window, const Member::Att
   LOG_TRACE(LOG_VAR(&window) LOG_VAR(&attributeMapping));
 
   for (const auto &[descriptor, attributes]: attributeMapping)
-    window.at(descriptor).push(attributes);
+  {
+    if (window.contains(descriptor))
+    {
+      window.at(descriptor).push(attributes);
+      continue;
+    }
+
+    CircularBuffer rawAttributes(cmMovingWindowSize);
+    rawAttributes.push(attributes);
+    window.emplace(
+      descriptor,
+      std::move(rawAttributes)
+    );
+  }
 }
 
 bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &window, Alert &oAlert)
@@ -141,7 +145,7 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
 
   for (const auto &[descriptor, buffer]: window)
   {
-    if (buffer.empty())
+    if (!buffer.full())
       continue;
 
     double
@@ -156,8 +160,18 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
   return !oAlert.affectedAttributes.empty();
   */
 
-  //! NOTE: dummy payload
+  //! NOTE: theoretically there is no detection if the attribute window does not have enough windows, so we simulate that situation
+  bool anyBufferFull = std::any_of(
+    window.begin(), window.end(),
+    [](const AttributeWindow::value_type &entry) -> bool
+    {
+      return entry.second.full();
+    }
+  );
+  if (!anyBufferFull)
+    return false;
 
+  //! NOTE: dummy payload
   Timestamp start = cr::system_clock::now();
   while (cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() < 10)
   {
@@ -168,12 +182,12 @@ bool FaultDetection::detectFaults(MemberPtr member, const AttributeWindow &windo
   FaultMapping::iterator it = mFaultMapping.find(name);
   if (it == mFaultMapping.end())
   {
-    // std::cout << "Member " << member << " with name " << name << " is not planned to fail.\n";
+    // LOG_DEBUG("Member " << member << " with name " << name << " is not planned to fail.");
     return false;
   }
 
   int64_t diff = cr::duration_cast<cr::milliseconds>(it->second - cr::system_clock::now()).count();
-  // std::cout << "Member " << member << " with name " << name << " has " << diff << "ms until failure\n";
+  // LOG_DEBUG("Member " << member << " with name " << name << " has " << diff << "ms until failure");
   return diff <= 0;
 }
 

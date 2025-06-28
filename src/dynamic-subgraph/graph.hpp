@@ -26,7 +26,11 @@ public:
   bool contains(
     const MemberProxy &member
   ) const;
+  bool contains(
+    const std::string &member
+  ) const;
   void reset() { mVertices.clear(); }
+  size_t size() const;
 
   void visualise(
     const std::atomic<bool> &running,
@@ -47,8 +51,13 @@ public:
   );
 
 private:
+  bool unprotectedContains(
+    const MemberProxy &member
+  ) const;
+
+private:
   Members mVertices;
-  std::mutex mVerticesMutex;
+  mutable std::mutex mmVerticesMutex;
 
   std::atomic<bool> mUpdateVisualisation;
 };

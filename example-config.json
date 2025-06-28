@@ -6,7 +6,7 @@
     "retry-timeout-ms": 1000
   },
   "alert-rate": {
-    "nr-normalisation-values": 20,
+    "nr-normalisation-values": 50,
     "abortion-criteria-threshold": 0.05
   },
   "blindspot-interval": 15,
@@ -16,7 +16,7 @@
     "/arequipa"
   ],
   "moving-window-size": 10,
-  "target-frequency-hz": 10.0,
+  "target-frequency-hz": 10.0, //25.0,
   "timed-faults": [
     {
       "name": "/delhi",

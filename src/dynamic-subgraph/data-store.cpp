@@ -57,9 +57,13 @@ const MemberPtr DataStore::getNode(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  Nodes::iterator it = mNodes.find(primary);
-  if (it != mNodes.end())
-    return MAKE_MEMBER_PTR(it);
+  {
+    const ScopeTimer scopedTimer("getNode return existing");
+    const ScopeLock scopedLock(mNodesMutex);
+    Nodes::iterator it = mNodes.find(primary);
+    if (it != mNodes.end())
+      return MAKE_MEMBER_PTR(it);
+  }
 
   return requestNode(primary, true);
 }
@@ -98,6 +102,7 @@ MemberPtr DataStore::requestNode(const PrimaryKey &primary, bool updates)
   requestId_t requestId;
   Nodes::iterator node;
   {
+    const ScopeTimer scopedTimer("requestNode request");
     const ScopeLock scopedLock(mTopicsMutex);
 
     mIpcClient.sendNodeRequest(nodeRequest, requestId);
@@ -112,12 +117,19 @@ MemberPtr DataStore::requestNode(const PrimaryKey &primary, bool updates)
     .continuous = true
   };
   util::parseString(req.primaryKey, node->instance.mPrimaryKey);
-  mIpcClient.sendSingleAttributesRequest(req, requestId);
-  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
-  assert(requestId == response.requestID);
+  SingleAttributesResponse response;
+  {
+    const ScopeTimer scopedTimer("requestNode request attr");
+    mIpcClient.sendSingleAttributesRequest(req, requestId);
+    response = mIpcClient.receiveSingleAttributesResponse().value();
+    assert(requestId == response.requestID);
+  }
 
-  LOG_TRACE("Added CPU utilisation attribute to " << node->instance << " with shared memory location: " << response.memAddress);
-  node->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+  {
+    const ScopeTimer scopedTimer("requestNode add attr");
+    LOG_TRACE("Added CPU utilisation attribute to " << node->instance << " with shared memory location: " << response.memAddress);
+    node->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+  }
 
   return MAKE_MEMBER_PTR(node);
 }
@@ -126,9 +138,13 @@ const MemberPtr DataStore::getTopic(const PrimaryKey &primary)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
-  Topics::iterator it = mTopics.find(primary);
-  if (it != mTopics.end())
-    return MAKE_MEMBER_PTR(it);
+  {
+    const ScopeTimer scopedTimer("getTopic return existing");
+    const ScopeLock scopedLock(mTopicsMutex);
+    Topics::iterator it = mTopics.find(primary);
+    if (it != mTopics.end())
+      return MAKE_MEMBER_PTR(it);
+  }
 
   return requestTopic(primary, true);
 }
@@ -167,6 +183,7 @@ MemberPtr DataStore::requestTopic(const PrimaryKey &primary, bool updates)
   requestId_t requestId;
   Topics::iterator topic;
   {
+    const ScopeTimer scopedTimer("requestTopic request");
     const ScopeLock scopedLock(mTopicsMutex);
 
     mIpcClient.sendTopicRequest(topicRequest, requestId);
@@ -175,18 +192,26 @@ MemberPtr DataStore::requestTopic(const PrimaryKey &primary, bool updates)
   }
   LOG_TRACE("Created topic " << topic->instance);
 
-  SingleAttributesRequest req{
-    .attribute = AttributeName::CPU_UTILIZATION,
-    .direction = Direction::NONE,
-    .continuous = true
-  };
-  util::parseString(req.primaryKey, topic->instance.mPrimaryKey);
-  mIpcClient.sendSingleAttributesRequest(req, requestId);
-  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
-  assert(requestId == response.requestID);
+  SingleAttributesResponse response;
+  std::string attributeName;
+  for (const Topic::Edges::value_type &edge: topic->instance.mPublishers)
+  {
+    const ScopeTimer scopedTimer("requestTopic add attribute");
 
-  LOG_TRACE("Added CPU utilisation attribute to " << topic->instance << " with shared memory location: " << response.memAddress);
-  topic->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
+    SingleAttributesRequest req{
+      .attribute = AttributeName::PUBLISHINGRATES,
+      .direction = Direction::NONE,
+      .continuous = true
+    };
+    util::parseString(req.primaryKey, edge.primaryKey);
+    mIpcClient.sendSingleAttributesRequest(req, requestId);
+    response = mIpcClient.receiveSingleAttributesResponse().value();
+    assert(requestId == response.requestID);
+    attributeName = std::to_string(AttributeName::PUBLISHINGRATES) + ": " + edge.primaryKey;
+
+    LOG_TRACE("Added attribute " << attributeName << " to " << topic->instance << " with shared memory location: " << response.memAddress);
+    topic->instance.addAttributeSource(attributeName, response);
+  }
 
   return MAKE_MEMBER_PTR(topic);
 }
@@ -670,6 +695,26 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       if (it != mTopics.end())
       {
         it->instance.update(publishersUpdateValue);
+
+        {
+          SingleAttributesResponse response;
+          std::string attributeName;
+          requestId_t requestId;
+          SingleAttributesRequest req{
+            .attribute = AttributeName::PUBLISHINGRATES,
+            .direction = Direction::NONE,
+            .continuous = true
+          };
+          std::memcpy(req.primaryKey, publishersUpdateValue.publisher, MAX_STRING_SIZE);
+          mIpcClient.sendSingleAttributesRequest(req, requestId);
+          response = mIpcClient.receiveSingleAttributesResponse().value();
+          assert(requestId == response.requestID);
+          attributeName = std::to_string(AttributeName::PUBLISHINGRATES) + ": " + publishersUpdateValue.publisher;
+
+          LOG_TRACE("Added attribute " << attributeName << " to " << it->instance << " with shared memory location: " << response.memAddress);
+          it->instance.addAttributeSource(attributeName, response);
+        }
+
         this->addPubUpdate(it, util::parseString(publishersUpdateValue.publisher));
       }
       else

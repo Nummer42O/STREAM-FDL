@@ -37,12 +37,12 @@ class FaultDetection
 {
 public:
   using Alerts = std::vector<Alert>;
+  using FaultMapping = std::map<std::string /*name*/, Timestamp /*fault start time*/>;
 
 private:
   using InternalMember = Watchlist::WatchlistMember;
   using AttributeWindow = std::map<Member::AttributeDescriptor, CircularBuffer>;
   using MemberWindow = std::map<InternalMember, AttributeWindow>;
-  using FaultMapping = std::map<std::string /*name*/, Timestamp /*fault start time*/>;
 
 public:
   FaultDetection(
@@ -64,7 +64,7 @@ private:
     const Member::AttributeMapping &attributeMapping
   ) const;
 
-  static void updateAttrWindow(
+  void updateAttrWindow(
     AttributeWindow &window,
     const Member::AttributeMapping &attributeMapping
   );
@@ -79,12 +79,14 @@ private:
     const json::json &config
   );
 
+public:
+  FaultMapping mFaultMapping;
+
 private:
   Alerts mAlerts;
   std::mutex mAlertMutex;
   std::condition_variable mHasNewAlerts;
   MemberWindow mMovingWindow;
-  FaultMapping mFaultMapping;
 
   Watchlist *const mcpWatchlist;
 

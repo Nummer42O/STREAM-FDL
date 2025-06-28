@@ -33,12 +33,12 @@ public:
   );
 
   void run(
-    const std::atomic<bool> &running
+    std::atomic<bool> &running
   );
 
 private:
   void runUpdateCycle(
-    const std::atomic<bool> &running
+    std::atomic<bool> &running
   );
 
   void blindSpotCheck();

@@ -29,7 +29,7 @@ bool Graph::add(const MemberPtr &member)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(member));
 
-  const ScopeLock scopedLock(mVerticesMutex);
+  const ScopeLock scopedLock(mmVerticesMutex);
 
   Members::iterator it = std::find_if(
     mVertices.begin(), mVertices.end(),
@@ -47,14 +47,33 @@ bool Graph::add(const MemberPtr &member)
 
 bool Graph::contains(const MemberProxy &member) const
 {
+  LOG_TRACE(LOG_THIS LOG_VAR(member));
+
+  const ScopeLock scopedLock(mmVerticesMutex);
+  return this->unprotectedContains(member);
+}
+
+bool Graph::contains(const std::string &member) const
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(member));
+
+  const ScopeLock scopedLock(mmVerticesMutex);
   Members::const_iterator it = std::find_if(
     mVertices.begin(), mVertices.end(),
     [&member](const Members::value_type &existingMember)
     {
-      return existingMember->mPrimaryKey == member.mPrimaryKey;
+      return ::getName(existingMember) == member;
     }
   );
   return it != mVertices.end();
+}
+
+size_t Graph::size() const
+{
+  LOG_TRACE(LOG_THIS);
+
+  const ScopeLock scopedLock(mmVerticesMutex);
+  return mVertices.size();
 }
 
 #define PSEUDO_CSTR(string) const_cast<char *>((string).c_str())
@@ -75,7 +94,7 @@ void Graph::visualise(const std::atomic<bool> &running, cr::milliseconds loopTar
       GVC_t *gvc = gvContext();
       Agraph_t *graph = agopen(const_cast<char *>("g"), Agdirected, NULL);
       {
-        const ScopeLock scopedLock(mVerticesMutex);
+        const ScopeLock scopedLock(mmVerticesMutex);
 
         for (const MemberPtr &vertex: mVertices)
         {
@@ -135,7 +154,7 @@ MemberProxies Graph::getOutgoing(const MemberPtr &member)
     const Topic *topic = ::asTopic(member);
 
     for (const auto &[edge, targetNode]: topic->mSubscribers)
-      if (this->contains(targetNode))
+      if (this->unprotectedContains(targetNode))
         outgoing.push_back(targetNode);
   }
   else
@@ -144,14 +163,14 @@ MemberProxies Graph::getOutgoing(const MemberPtr &member)
 
     for (const auto &[serviceName, clients]: node->mClients)
       for (const MemberProxy &client: clients)
-        if (this->contains(client))
+        if (this->unprotectedContains(client))
           outgoing.push_back(client);
     for (const auto &[serviceName, clients]: node->mActionClients)
       for (const MemberProxy &client: clients)
-        if (this->contains(client))
+        if (this->unprotectedContains(client))
           outgoing.push_back(client);
     for (const MemberProxy &targetTopic: node->mPublishesTo)
-      if (this->contains(targetTopic))
+      if (this->unprotectedContains(targetTopic))
         outgoing.push_back(targetTopic);
   }
 
@@ -181,6 +200,20 @@ MemberProxies Graph::getIncoming(const MemberPtr &member)
   }
 
   return incoming;
+}
+
+bool Graph::unprotectedContains(const MemberProxy &member) const
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(member));
+
+  Members::const_iterator it = std::find_if(
+    mVertices.begin(), mVertices.end(),
+    [&member](const Members::value_type &existingMember)
+    {
+      return existingMember->mPrimaryKey == member.mPrimaryKey;
+    }
+  );
+  return it != mVertices.end();
 }
 
 std::ostream &operator<<(std::ostream &stream, const Graph &graph)

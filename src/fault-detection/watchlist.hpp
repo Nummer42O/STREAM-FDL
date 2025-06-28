@@ -43,10 +43,6 @@ public:
     const MemberProxy &member,
     WatchlistMemberType type = TYPE_NORMAL
   );
-  void addMember(
-    MemberPtr member,
-    WatchlistMemberType type = TYPE_NORMAL
-  );
   void removeMember(
     const PrimaryKey &member
   );
@@ -64,6 +60,11 @@ public:
   );
 
 private:
+  void addMemberInteral(
+    MemberProxy member,
+    WatchlistMemberType type = TYPE_NORMAL
+  );
+
   WatchlistMembers::iterator get(
     const PrimaryKey &member
   )
@@ -78,9 +79,10 @@ private:
   }
 
 private:
-  std::vector<std::string> mInitialMemberNames;
-  WatchlistMembers mMembers;
-  std::mutex mMembersMutex;
-  DataStore::Ptr mpDataStore;
+  std::vector<std::string>  mInitialMemberNames;
+  WatchlistMembers          mMembers;
+  std::mutex                mMembersMutex;
+  DataStore::Ptr            mpDataStore;
 };
 std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type);
+std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMember &member);
