@@ -5,12 +5,14 @@
 #include <thread>
 using namespace std::chrono_literals;
 #include <iostream>
+#include <fstream>
 
 
 DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataStore::Ptr dataStorePtr, bool runHolistic):
   mWatchlist(config.at(CONFIG_WATCHLIST), dataStorePtr),
   mFD(config, &mWatchlist),
   mpDataStore(dataStorePtr),
+  mRestartCounter(0ul),
   mSomethingIsGoingOn(false),
   mLastNrAlerts(config.at(CONFIG_ALERT_RATE).at(CONFIG_NR_NORMALISATION_VALUES).get<size_t>()),
   mBlindSpotCheckCounter(0ul),
@@ -25,42 +27,50 @@ DynamicSubgraphBuilder::DynamicSubgraphBuilder(const json::json &config, DataSto
   mCpuUtilisationSource = mpDataStore->getCpuUtilisationMemory();
 }
 
-void DynamicSubgraphBuilder::run(std::atomic<bool> &running)
+void DynamicSubgraphBuilder::run(const std::atomic<bool> &running)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(running.load()));
-  mRuntimeStart = cr::system_clock::now();
+  // mRuntimeStart = cr::system_clock::now();
 
-  std::thread updates(&DynamicSubgraphBuilder::runUpdateCycle, this, std::ref(running));
-  std::thread watchlist(&Watchlist::run, &mWatchlist, std::cref(running), cmLoopTargetInterval);
-  std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
+  std::thread updates(&DynamicSubgraphBuilder::runUpdateCycle, this, std::cref(running));
   std::thread dataStore(&DataStore::run, mpDataStore, std::cref(running), cmLoopTargetInterval);
-  std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running), cmLoopTargetInterval);
+  // std::thread visualisation(&Graph::visualise, &mSAG, std::cref(running), cmLoopTargetInterval);
 
   if (cmRunHolistic)
   {
     MemberProxies proxies = mpDataStore->getAllMembers();
     for (const MemberProxy &proxy: proxies)
-      mWatchlist.addMember(proxy);
+      mWatchlist.addMemberSync(proxy, Watchlist::TYPE_INITIAL);
   }
+  // std::cout << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << '\n';
+  mRuntimeStart = cr::system_clock::now();
+  std::cout << "Start: " << (1000 * cr::duration_cast<cr::seconds>(cr::system_clock::now().time_since_epoch()).count()) << '\n';
+
+  std::thread watchlist(&Watchlist::run, &mWatchlist, std::cref(running), cmLoopTargetInterval);
+  std::thread faultDetection(&FaultDetection::run, &mFD, std::cref(running), cmLoopTargetInterval);
 
   Timestamp start, stop;
   while (running.load())
   {
     start = cr::system_clock::now();
 
-    // if (!cmRunHolistic)
-    // {
-    //   sharedMem::Response resp = MAKE_RESPONSE;
-    //   mCpuUtilisationSource.receive(resp);
-    //   assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
-    //   assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
-    //   double cpuUtilisation = resp.numerical.value;
+    if (!cmRunHolistic)
+    {
+      sharedMem::Response resp = MAKE_RESPONSE;
+      mCpuUtilisationSource.receive(resp);
 
-    //   LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
-    //   if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
-    //     blindSpotCheck();
-    //   mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
-    // }
+      //! NOTE: as the shared memory does not overwrite unread memory we need to make sure its "empty"
+      while (mCpuUtilisationSource.receive(resp, false)) {}
+
+      assert(resp.header.type == sharedMem::ResponseType::NUMERICAL);
+      assert(resp.numerical.number == 1ul && resp.numerical.total == 1ul);
+      double cpuUtilisation = resp.numerical.value;
+
+      LOG_DEBUG(LOG_VAR(mBlindSpotCheckCounter) LOG_VAR(cpuUtilisation));
+      if (mBlindSpotCheckCounter == 0ul && cpuUtilisation < cmMaximumCpuUtilisation)
+        this->blindSpotCheck();
+      mBlindSpotCheckCounter = (mBlindSpotCheckCounter + 1) % cmBlindspotInterval;
+    }
 
     DataStore::GraphView updates = mpDataStore->getUpdates();
     LOG_INFO("Got " << updates.size() << " updates.");
@@ -71,10 +81,16 @@ void DynamicSubgraphBuilder::run(std::atomic<bool> &running)
         if (!mSAG.contains(update.member))
           continue;
         for (const MemberProxy &member: update.connections)
+        {
           if (!mWatchlist.contains(member.mPrimaryKey))
-            mWatchlist.addMember(member);
+            mWatchlist.addMemberAsync(member);
+        }
       }
     }
+
+    //! NOTE: trying to lock the mutex will halt the loop while it is already externally locked for synchronisation
+    mMainloopMutex.lock();
+    mMainloopMutex.unlock();
 
     stop = cr::system_clock::now();
     cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
@@ -88,10 +104,10 @@ void DynamicSubgraphBuilder::run(std::atomic<bool> &running)
   watchlist.join();
   faultDetection.join();
   dataStore.join();
-  visualisation.join();
+  // visualisation.join();
 }
 
-void DynamicSubgraphBuilder::runUpdateCycle(std::atomic<bool> &running)
+void DynamicSubgraphBuilder::runUpdateCycle(const std::atomic<bool> &running)
 {
   Timestamp start, stop;
   while (running.load())
@@ -104,23 +120,37 @@ void DynamicSubgraphBuilder::runUpdateCycle(std::atomic<bool> &running)
     {
       LOG_INFO("Abortion criteria reached, starting fault trajectory extraction.");
 
-      //! NOTE: temporary, remove later
-      std::cout << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << '\n';
-      running = false;
-      return;
+      std::cout << "Runtime:   " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mRuntimeStart).count() << "ms\n";
+      std::cout << "Timestamp break: " << (1000 * cr::duration_cast<cr::seconds>(cr::system_clock::now().time_since_epoch()).count()) << '\n';
+
+      const ScopeLock mainScopedLock(mMainloopMutex);
+      const ScopeLock fdScopedLock(mFD.mMainloopMutex);
+      const ScopeLock wlScopedLock(mWatchlist.mMainloopMutex);
 
       mSomethingIsGoingOn = false;
       //mFTE.doSomething();
+
+      while (mWatchlist.mPendingAdditions)
+        std::this_thread::sleep_for(10ms);
+
+      if (++mRestartCounter > 10)
+        std::exit(0);
+
       mWatchlist.reset();
       mFD.reset();
       mSAG.reset();
 
+      mpDataStore->removeDangling();
+      mRuntimeStart = cr::system_clock::now();
+
+      std::cout << "Timestamp reset: " << (1000 * cr::duration_cast<cr::seconds>(cr::system_clock::now().time_since_epoch()).count()) << '\n';
+
       // get the last alerts that might have sprung up before the reset
-      Alerts lastAlerts = mFD.getEmittedAlerts();
-      std::move(lastAlerts.begin(), lastAlerts.end(), std::back_inserter(emittedAlerts));
+      // Alerts lastAlerts = mFD.getEmittedAlerts();
+      // std::move(lastAlerts.begin(), lastAlerts.end(), std::back_inserter(emittedAlerts));
     }
-    //! NOTE: updating the graph after the break condition check as updating before would cause the new alert rate to stay at 0 permanently
-    if (!emittedAlerts.empty())
+    else if (!emittedAlerts.empty())
+      //! NOTE: updating the graph after the break condition check as updating before would cause the new alert rate to stay at 0 permanently
       this->extendSubgraph(emittedAlerts);
 
     //! TODO: std::move emittedAlerts into FTE-Alert-DB
@@ -149,8 +179,14 @@ static void getBlindspotsInternal(
   // i.e. the path loops, the current node should be monitored as a potential blind spot
   // otherwise continue traversing the path
   if (nrOutgoingEdges == 0ul ||
-      (nrOutgoingEdges == 1ul &&
-       std::find(currentPath.begin(), currentPath.end(), currentMember.connections.front()) != currentPath.end()))
+      (std::all_of(
+        currentMember.connections.begin(), currentMember.connections.end(),
+        [&currentPath](const MemberProxy &proxy) -> bool
+        {
+          MemberProxies::iterator endIt = currentPath.end();
+          return std::find(currentPath.begin(), endIt, proxy) != endIt;
+        }
+      )))
   {
     LOG_TRACE(currentMember.member << " is blindspot")
     oBlindSpots.push_back(currentMember.member);
@@ -203,12 +239,17 @@ void DynamicSubgraphBuilder::blindSpotCheck()
 {
   LOG_TRACE(LOG_THIS);
 
+  std::cout << "Timestamp blindspot: " << (1000 * cr::duration_cast<cr::seconds>(cr::system_clock::now().time_since_epoch()).count()) << '\n';
+
+  ScopeTimer timer("get blindspots");
   DataStore::GraphView fullGraph = mpDataStore->getFullGraphView();
+  // timer.print("get full graph", true);
   MemberProxies potentialBlindSpots = ::getBlindspots(std::move(fullGraph));
-  // LOG_DEBUG(LOG_VAR(potentialBlindSpots));
+  // timer.print("calc blindspots", true);
+  LOG_DEBUG(LOG_VAR(potentialBlindSpots));
 
   for (const MemberProxy &member: potentialBlindSpots)
-    mWatchlist.addMember(member, Watchlist::TYPE_BLINDSPOT);
+    mWatchlist.addMemberAsync(member, Watchlist::TYPE_BLINDSPOT);
 }
 
 void DynamicSubgraphBuilder::extendSubgraph(const Alerts &newAlerts)
@@ -222,7 +263,7 @@ void DynamicSubgraphBuilder::extendSubgraph(const Alerts &newAlerts)
       MemberProxies incoming = mSAG.getIncoming(alert.member);
       LOG_DEBUG("Incoming members for " << alert.member << ": " << incoming);
       for (const MemberProxy &incomingMember: incoming)
-        mWatchlist.addMember(incomingMember);
+        mWatchlist.addMemberAsync(incomingMember);
     }
     else
       LOG_DEBUG("Graph already contains " << alert.member);
@@ -234,11 +275,14 @@ void DynamicSubgraphBuilder::extendSubgraph(const Alerts &newAlerts)
 bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
 {
   LOG_TRACE(LOG_THIS);
+  const ScopeTimer timer("breakpoint");
 
   size_t nrNewAlerts = 0ul;
   for (const Alert &alert: newAlerts)
+  {
     if (!mSAG.contains(MemberProxy(alert.member->mPrimaryKey, alert.member->mIsTopic)))
       ++nrNewAlerts;
+  }
 
   if (!mSomethingIsGoingOn && nrNewAlerts > 0)
   {
@@ -254,9 +298,13 @@ bool DynamicSubgraphBuilder::checkAbortCirteria(const Alerts &newAlerts)
   if (mFD.mFaultMapping.size() != mSAG.size())
     return false;
 
-  for (const auto &[name, _]: mFD.mFaultMapping)
-    if (!mSAG.contains(name))
+  std::cout << "Timestamp sag size: " << (1000 * cr::duration_cast<cr::seconds>(cr::system_clock::now().time_since_epoch()).count()) << '\n';
+
+  for (const auto &entry: mFD.mFaultMapping)
+  {
+    if (!mSAG.contains(entry.first))
       return false;
+  }
   return true;
 
   // return (mSomethingIsGoingOn && meanNewAlerts <= cmAbortionCriteriaThreshold);

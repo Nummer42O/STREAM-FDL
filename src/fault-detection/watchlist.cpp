@@ -7,6 +7,7 @@
 
 
 Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
+  mPendingAdditions(0),
   mpDataStore(dataStorePtr)
 {
   LOG_TRACE(LOG_THIS LOG_VAR(config) LOG_VAR(dataStorePtr));
@@ -19,17 +20,48 @@ Watchlist::Watchlist(const json::json &config, DataStore::Ptr dataStorePtr):
   //! TODO: when this also accepts topics eventually, we should probably clean from ignored topics
 }
 
-void Watchlist::addMember(const MemberProxy &member, WatchlistMemberType type)
+void Watchlist::addMemberAsync(const MemberProxy &member, WatchlistMemberType type)
 {
   LOG_TRACE(LOG_THIS << member << " type: " << type);
+
+  std::thread(&Watchlist::addMemberSync, this, member, type).detach();
+}
+
+void Watchlist::addMemberSync(MemberProxy member, WatchlistMemberType type)
+{
+  LOG_TRACE(LOG_THIS LOG_VAR(member) LOG_VAR(type));
+  const ScopeTimer timer("add member");
+  ++mPendingAdditions;
 
   if (member.mIsTopic && mpDataStore->checkTopicPrimaryIgnored(member.mPrimaryKey))
   {
     LOG_DEBUG("Requested ignored member " << member << ", not adding to watchlist.");
+
+    --mPendingAdditions;
     return;
   }
 
-  std::thread(&Watchlist::addMemberInteral, this, member, type).detach();
+  {
+    const ScopeLock scopeLock(mMembersMutex);
+    auto it = this->get(member.mPrimaryKey);
+    if (it != mMembers.end())
+    {
+      if (it->type == TYPE_BLINDSPOT)
+        it->type = type;
+      LOG_DEBUG(member << " already in watchlist, updated type.");
+
+      --mPendingAdditions;
+      return;
+    }
+  }
+  LOG_TRACE("Adding " << member << " to watchlist.");
+
+  MemberPtr node = mpDataStore->get(member);
+  {
+    const ScopeLock scopedLock(mMembersMutex);
+    mMembers.emplace_back(std::move(node), type);
+  }
+  --mPendingAdditions;
 }
 
 void Watchlist::removeMember(const PrimaryKey &member)
@@ -64,7 +96,16 @@ void Watchlist::reset()
   LOG_TRACE(LOG_THIS);
   const ScopeLock scopeLock(mMembersMutex);
 
-  mMembers.clear();
+   mMembers.erase(
+    std::remove_if(
+      mMembers.begin(), mMembers.end(),
+      [](const WatchlistMembers::value_type &entry) -> bool
+      {
+        return entry.type != TYPE_INITIAL;
+      }
+    ),
+    mMembers.end()
+   );
 }
 
 void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTargetInterval)
@@ -108,6 +149,10 @@ void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
       it = mInitialMemberNames.erase(it);
     }
 
+    //! NOTE: trying to lock the mutex will halt the loop while it is already externally locked for synchronisation
+    mMainloopMutex.lock();
+    mMainloopMutex.unlock();
+
     stop = cr::system_clock::now();
     cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);
     cr::milliseconds remainingTime = loopTargetInterval - elapsedTime;
@@ -116,37 +161,6 @@ void Watchlist::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
   }
 
   LOG_INFO("Exiting watchlist loop.")
-}
-
-void Watchlist::addMemberInteral(MemberProxy member, WatchlistMemberType type)
-{
-  LOG_TRACE(LOG_THIS LOG_VAR(member) LOG_VAR(type));
-
-  Timestamp start = cr::system_clock::now();
-  {
-    const ScopeLock scopeLock(mMembersMutex);
-    auto it = this->get(member.mPrimaryKey);
-    if (it != mMembers.end())
-    {
-      if (it->type == TYPE_BLINDSPOT)
-        it->type = type;
-      LOG_DEBUG(member << " already in watchlist, updated type.");
-      return;
-    }
-  }
-  std::cout << "checking existence took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
-  LOG_TRACE("Adding " << member << " to watchlist.");
-
-  start = cr::system_clock::now();
-  MemberPtr node = mpDataStore->get(member);
-  std::cout << "getting member took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
-
-  start = cr::system_clock::now();
-  {
-    const ScopeLock scopedLock(mMembersMutex);
-    mMembers.emplace_back(std::move(node), type);
-  }
-  std::cout << "emplacing member took: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - start).count() << "ms\n";
 }
 
 std::ostream &operator<<(std::ostream &stream, const Watchlist::WatchlistMemberType &type)

@@ -21,11 +21,6 @@ public:
   using Alerts = FaultDetection::Alerts;
 
 public:
-  /**
-   * initialise FD, FTE
-   *
-   * @param config json configuration object
-   */
   DynamicSubgraphBuilder(
     const json::json &config,
     DataStore::Ptr dataStorePtr,
@@ -33,12 +28,12 @@ public:
   );
 
   void run(
-    std::atomic<bool> &running
+    const std::atomic<bool> &running
   );
 
 private:
   void runUpdateCycle(
-    std::atomic<bool> &running
+    const std::atomic<bool> &running
   );
 
   void blindSpotCheck();
@@ -60,6 +55,8 @@ private:
   DataStore::SharedMemory   mCpuUtilisationSource;
 
   Timestamp                 mRuntimeStart;
+  size_t                    mRestartCounter;
+  std::mutex                mMainloopMutex;
 
   bool                      mSomethingIsGoingOn;
   CircularBuffer            mLastNrAlerts;

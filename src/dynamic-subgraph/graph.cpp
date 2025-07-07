@@ -154,24 +154,36 @@ MemberProxies Graph::getOutgoing(const MemberPtr &member)
     const Topic *topic = ::asTopic(member);
 
     for (const auto &[edge, targetNode]: topic->mSubscribers)
+    {
       if (this->unprotectedContains(targetNode))
         outgoing.push_back(targetNode);
+    }
   }
   else
   {
     const Node *node = ::asNode(member);
 
     for (const auto &[serviceName, clients]: node->mClients)
+    {
       for (const MemberProxy &client: clients)
+      {
         if (this->unprotectedContains(client))
           outgoing.push_back(client);
+      }
+    }
     for (const auto &[serviceName, clients]: node->mActionClients)
+    {
       for (const MemberProxy &client: clients)
+      {
         if (this->unprotectedContains(client))
           outgoing.push_back(client);
+      }
+    }
     for (const MemberProxy &targetTopic: node->mPublishesTo)
+    {
       if (this->unprotectedContains(targetTopic))
         outgoing.push_back(targetTopic);
+    }
   }
 
   return outgoing;

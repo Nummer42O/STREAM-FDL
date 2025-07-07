@@ -16,7 +16,7 @@ CircularBuffer::CircularBuffer(size_t maxSize):
   assert(mMaxSize >= 2);
   LOG_TRACE(LOG_THIS LOG_VAR(maxSize));
 
-  mCurrent = &mBuffer[mMaxSize];
+  mCurrent = &mBuffer[-1];
 }
 
 CircularBuffer::CircularBuffer(const CircularBuffer &other):
@@ -73,10 +73,8 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 
   if (mSize < mMaxSize)
     ++mSize;
-  if (mCurrent == this->absoluteEnd())
+  if (++mCurrent == &mBuffer[mMaxSize])
     mCurrent = mBuffer.get();
-  else
-    ++mCurrent;
 
   *mCurrent = value;
 
@@ -86,7 +84,7 @@ CircularBuffer::iterator CircularBuffer::push(value_type value)
 void CircularBuffer::reset()
 {
   mSize = 0ul;
-  mCurrent = &mBuffer[mMaxSize];
+  mCurrent = &mBuffer[-1];
 }
 
 CircularBuffer::value_type &CircularBuffer::at(index_type i)
@@ -100,6 +98,7 @@ CircularBuffer::value_type &CircularBuffer::at(index_type i)
 CircularBuffer::const_iterator CircularBuffer::current(ptrdiff_t offset) const
 {
   LOG_TRACE(LOG_THIS LOG_VAR(offset));
+  assert(mCurrent != &mBuffer[-1]);
 
   const_iterator beginIt = mBuffer.get();
   ptrdiff_t currentOffset = mCurrent - beginIt;

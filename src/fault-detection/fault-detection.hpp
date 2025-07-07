@@ -57,7 +57,7 @@ public:
 
   Alerts getEmittedAlerts();
 
-  void reset() { mMovingWindow.clear(); }
+  void reset() { const ScopeLock scopedLock(mMovingWindowMutex); mMovingWindow.clear(); }
 
 private:
   AttributeWindow createAttrWindow(
@@ -81,12 +81,14 @@ private:
 
 public:
   FaultMapping mFaultMapping;
+  std::mutex mMainloopMutex;
 
 private:
   Alerts mAlerts;
   std::mutex mAlertMutex;
   std::condition_variable mHasNewAlerts;
   MemberWindow mMovingWindow;
+  std::mutex mMovingWindowMutex;
 
   Watchlist *const mcpWatchlist;
 

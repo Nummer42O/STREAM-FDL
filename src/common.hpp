@@ -199,7 +199,18 @@ public:
   {}
   ~ScopeTimer()
   {
-    std::cout << "Timer " << mName << ": " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mStart).count() << "ms\n";
+    std::stringstream stream;
+    stream << "Timer " << mName << ": " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mStart).count() << "ms\n";
+    std::cout << stream.str();
+  }
+
+  void print(const char *msg, bool reset = false)
+  {
+    std::stringstream stream;
+    stream << "Timer " << msg << ": " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now() - mStart).count() << "ms\n";
+    std::cout << stream.str();
+    if (reset)
+      mStart = cr::system_clock::now();
   }
 
 private:

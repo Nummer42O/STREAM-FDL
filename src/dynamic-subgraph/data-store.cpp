@@ -58,7 +58,6 @@ const MemberPtr DataStore::getNode(const PrimaryKey &primary)
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
   {
-    const ScopeTimer scopedTimer("getNode return existing");
     const ScopeLock scopedLock(mNodesMutex);
     Nodes::iterator it = mNodes.find(primary);
     if (it != mNodes.end())
@@ -102,8 +101,7 @@ MemberPtr DataStore::requestNode(const PrimaryKey &primary, bool updates)
   requestId_t requestId;
   Nodes::iterator node;
   {
-    const ScopeTimer scopedTimer("requestNode request");
-    const ScopeLock scopedLock(mTopicsMutex);
+    const ScopeLock scopedLock(mNodesMutex);
 
     mIpcClient.sendNodeRequest(nodeRequest, requestId);
     NodeResponse nodeResponse = mIpcClient.receiveNodeResponse().value();
@@ -117,19 +115,12 @@ MemberPtr DataStore::requestNode(const PrimaryKey &primary, bool updates)
     .continuous = true
   };
   util::parseString(req.primaryKey, node->instance.mPrimaryKey);
-  SingleAttributesResponse response;
-  {
-    const ScopeTimer scopedTimer("requestNode request attr");
-    mIpcClient.sendSingleAttributesRequest(req, requestId);
-    response = mIpcClient.receiveSingleAttributesResponse().value();
-    assert(requestId == response.requestID);
-  }
+  mIpcClient.sendSingleAttributesRequest(req, requestId);
+  SingleAttributesResponse response = mIpcClient.receiveSingleAttributesResponse().value();
+  assert(requestId == response.requestID);
 
-  {
-    const ScopeTimer scopedTimer("requestNode add attr");
-    LOG_TRACE("Added CPU utilisation attribute to " << node->instance << " with shared memory location: " << response.memAddress);
-    node->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
-  }
+  LOG_TRACE("Added CPU utilisation attribute to " << node->instance << " with shared memory location: " << response.memAddress);
+  node->instance.addAttributeSource(std::to_string(AttributeName::CPU_UTILIZATION), response);
 
   return MAKE_MEMBER_PTR(node);
 }
@@ -139,7 +130,6 @@ const MemberPtr DataStore::getTopic(const PrimaryKey &primary)
   LOG_TRACE(LOG_THIS LOG_VAR(primary));
 
   {
-    const ScopeTimer scopedTimer("getTopic return existing");
     const ScopeLock scopedLock(mTopicsMutex);
     Topics::iterator it = mTopics.find(primary);
     if (it != mTopics.end())
@@ -183,7 +173,6 @@ MemberPtr DataStore::requestTopic(const PrimaryKey &primary, bool updates)
   requestId_t requestId;
   Topics::iterator topic;
   {
-    const ScopeTimer scopedTimer("requestTopic request");
     const ScopeLock scopedLock(mTopicsMutex);
 
     mIpcClient.sendTopicRequest(topicRequest, requestId);
@@ -196,8 +185,6 @@ MemberPtr DataStore::requestTopic(const PrimaryKey &primary, bool updates)
   std::string attributeName;
   for (const Topic::Edges::value_type &edge: topic->instance.mPublishers)
   {
-    const ScopeTimer scopedTimer("requestTopic add attribute");
-
     SingleAttributesRequest req{
       .attribute = AttributeName::PUBLISHINGRATES,
       .direction = Direction::NONE,
@@ -537,42 +524,7 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
   {
     start = cr::system_clock::now();
 
-    /*
-    for (Nodes::iterator it = mNodes.begin(); it != mNodes.end();)
-    {
-      if (it->useCounter.nonZero())
-      {
-        ++it;
-        continue;
-      }
-
-      LOG_TRACE("Removing " << it->instance << "from data store");
-      //! NOTE: not yet implemented in datamgmt
-      // UnsubscribeRequest req{.id = it->requestId};
-      // requestId_t unsubReqId;
-
-      // const ScopeLock scopedLock(mNodesMutex);
-      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
-      it = mNodes.erase(it);
-    }
-    for (Topics::iterator it = mTopics.begin(); it != mTopics.end();)
-    {
-      if (it->useCounter.nonZero())
-      {
-        ++it;
-        continue;
-      }
-
-      LOG_TRACE("Removing " << it->instance << "from data store");
-      //! NOTE: not yet implemented in datamgmt
-      // UnsubscribeRequest req{.id = it->requestId};
-      // requestId_t unsubReqId;
-
-      // const ScopeLock scopedLock(mTopicsMutex);
-      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
-      it = mTopics.erase(it);
-    }
-    */
+    // this->removeDangling();
 
     std::optional<NodePublishersToUpdate> publishersToUpdate = mIpcClient.receiveNodePublishersToUpdate(false);
     if (publishersToUpdate.has_value())
@@ -740,6 +692,50 @@ void DataStore::run(const std::atomic<bool> &running, cr::milliseconds loopTarge
     cr::milliseconds remainingTime = loopTargetInterval - elapsedTime;
     if (remainingTime.count() > 0)
       std::this_thread::sleep_for(remainingTime);
+  }
+}
+
+void DataStore::removeDangling()
+{
+  {
+    const ScopeLock scopedLock(mNodesMutex);
+    for (Nodes::iterator it = mNodes.begin(); it != mNodes.end();)
+    {
+      if (it->useCounter.nonZero())
+      {
+        ++it;
+        continue;
+      }
+
+      LOG_TRACE("Removing " << it->instance << "from data store");
+      //! NOTE: not yet implemented in datamgmt
+      // UnsubscribeRequest req{.id = it->requestId};
+      // requestId_t unsubReqId;
+
+      // const ScopeLock scopedLock(mNodesMutex);
+      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      it = mNodes.erase(it);
+    }
+  }
+  {
+    const ScopeLock scopedLock(mTopicsMutex);
+    for (Topics::iterator it = mTopics.begin(); it != mTopics.end();)
+    {
+      if (it->useCounter.nonZero())
+      {
+        ++it;
+        continue;
+      }
+
+      LOG_TRACE("Removing " << it->instance << "from data store");
+      //! NOTE: not yet implemented in datamgmt
+      // UnsubscribeRequest req{.id = it->requestId};
+      // requestId_t unsubReqId;
+
+      // const ScopeLock scopedLock(mTopicsMutex);
+      // mIpcClient.sendUnsubscribeRequest(req, unsubReqId);
+      it = mTopics.erase(it);
+    }
   }
 }
 

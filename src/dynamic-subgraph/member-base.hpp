@@ -11,6 +11,7 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <cassert>
 
 
 class Node;
@@ -95,7 +96,7 @@ public:
   );
 
   Member &operator*() = delete;
-  const Member *operator->() const { return mpMember; }
+  const Member *operator->() const { assert(mpMember); return mpMember; }
 
   operator bool () const { return mpMember != nullptr; }
   bool valid() const { return mpMember != nullptr; }

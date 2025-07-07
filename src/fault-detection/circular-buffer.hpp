@@ -40,7 +40,7 @@ public:
 
   const_iterator begin() const { return mBuffer.get(); }
   const_iterator end() const { return &mBuffer[mSize]; }
-  const_iterator current() const { return mCurrent; }
+  const_iterator current() const { assert(mCurrent != &mBuffer[-1]); return mCurrent; }
   const_iterator current(ptrdiff_t offset) const;
 
   size_t size() const { return mSize; }
@@ -52,9 +52,6 @@ public:
   double getStdDev(
     double mean
   ) const;
-
-private:
-  const_iterator absoluteEnd() const { return &mBuffer[mMaxSize]; }
 
 private:
   size_t mMaxSize;

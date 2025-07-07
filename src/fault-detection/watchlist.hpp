@@ -39,10 +39,15 @@ public:
     DataStore::Ptr dataStorePtr
   );
 
-  void addMember(
+  void addMemberAsync(
     const MemberProxy &member,
     WatchlistMemberType type = TYPE_NORMAL
   );
+  void addMemberSync(
+    MemberProxy member,
+    WatchlistMemberType type = TYPE_NORMAL
+  );
+
   void removeMember(
     const PrimaryKey &member
   );
@@ -60,11 +65,6 @@ public:
   );
 
 private:
-  void addMemberInteral(
-    MemberProxy member,
-    WatchlistMemberType type = TYPE_NORMAL
-  );
-
   WatchlistMembers::iterator get(
     const PrimaryKey &member
   )
@@ -77,6 +77,10 @@ private:
       }
     );
   }
+
+public:
+  std::mutex mMainloopMutex;
+  std::atomic<size_t> mPendingAdditions;
 
 private:
   std::vector<std::string>  mInitialMemberNames;

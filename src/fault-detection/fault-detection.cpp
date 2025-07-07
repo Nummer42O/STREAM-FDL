@@ -37,6 +37,7 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
       // LOG_TRACE("Updating moving attribute window for member " << wlMember.member);
       Member::AttributeMapping attributes = wlMember.member->getAttributes();
 
+      const ScopeLock scopedLock(mMovingWindowMutex);
       MemberWindow::iterator it = mMovingWindow.find(wlMember);
       if (it == mMovingWindow.end())
         mMovingWindow.emplace(std::move(wlMember), this->createAttrWindow(attributes));
@@ -44,32 +45,40 @@ void FaultDetection::run(const std::atomic<bool> &running, cr::milliseconds loop
         this->updateAttrWindow(it->second, attributes);
     }
 
-    for (MemberWindow::iterator it = mMovingWindow.begin(); it != mMovingWindow.end();)
     {
-      const auto &[wlMember, attributeWindow] = *it;
-
-      // check if there is a fault
-      Alert alert;
-      if (this->detectFaults(wlMember.member, attributeWindow, alert))
+      const ScopeLock scopedLock(mMovingWindowMutex);
+      const ScopeTimer timer("FD");
+      for (MemberWindow::iterator it = mMovingWindow.begin(); it != mMovingWindow.end();)
       {
-        LOG_DEBUG("Detected fault for member " << wlMember.member);
-        const ScopeLock scopedLock(mAlertMutex);
-        mAlerts.push_back(std::move(alert));
-      }
+        const auto &[wlMember, attributeWindow] = *it;
 
-      // if the member for which the detection was issued is a blindspot member
-      // remove it from watchlist and detection
-      if (wlMember.type == Watchlist::TYPE_BLINDSPOT)
-      {
-        it = mMovingWindow.erase(it);
-        std::thread removeCall(&Watchlist::removeMember, mcpWatchlist, std::cref(wlMember.member->mPrimaryKey));
-        removeCall.detach();
-        // mcpWatchlist->removeMember(wlMember.member->mPrimaryKey);
+        // check if there is a fault
+        Alert alert;
+        if (this->detectFaults(wlMember.member, attributeWindow, alert))
+        {
+          LOG_DEBUG("Detected fault for member " << wlMember.member);
+          const ScopeLock scopedLock(mAlertMutex);
+          mAlerts.push_back(std::move(alert));
+        }
+
+        // if the member for which the detection was issued is a blindspot member
+        // remove it from watchlist and detection
+        if (wlMember.type == Watchlist::TYPE_BLINDSPOT)
+        {
+          it = mMovingWindow.erase(it);
+          std::thread removeCall(&Watchlist::removeMember, mcpWatchlist, std::cref(wlMember.member->mPrimaryKey));
+          removeCall.detach();
+          // mcpWatchlist->removeMember(wlMember.member->mPrimaryKey);
+        }
+        else
+          ++it;
       }
-      else
-        ++it;
     }
     mHasNewAlerts.notify_all();
+
+    //! NOTE: trying to lock the mutex will halt the loop while it is already externally locked for synchronisation
+    mMainloopMutex.lock();
+    mMainloopMutex.unlock();
 
     stop = cr::system_clock::now();
     cr::milliseconds elapsedTime = cr::duration_cast<cr::milliseconds>(stop - start);

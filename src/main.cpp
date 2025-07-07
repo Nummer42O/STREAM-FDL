@@ -13,6 +13,9 @@ namespace fs = std::filesystem;
 #include <cstring>
 #include <csignal>
 #include <atomic>
+#include <chrono>
+namespace cr = std::chrono;
+using namespace std::chrono_literals;
 
 #define MODE_NORMAL   "--normal"
 #define MODE_HOLISTIC "--holistic"
@@ -27,6 +30,8 @@ void sigintHandler(int signum)
 
 int main(int argc, char *argv[])
 {
+  std::this_thread::sleep_for(5s);
+
   if (argc != 3)
   {
     std::cerr <<
@@ -74,7 +79,9 @@ int main(int argc, char *argv[])
   {
     DataStore dataStore(config);
     DynamicSubgraphBuilder dsg(config, &dataStore, runHolistic);
+    config.~basic_json();
     LOG_TRACE("Initialised DataStore and DSG.");
+    std::cout << "Loopstart: " << cr::duration_cast<cr::milliseconds>(cr::system_clock::now().time_since_epoch()).count() << '\n';
 
     sighandler_t intHandler = signal(SIGINT, sigintHandler);
     sighandler_t hupHandler = signal(SIGHUP, sigintHandler);

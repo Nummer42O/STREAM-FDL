@@ -13,6 +13,9 @@ Member::AttributeMapping Member::getAttributes() const
     sharedMem::Response shmResponse = MAKE_RESPONSE;
     if (attribute.sharedMemory.receive(shmResponse, false))
     {
+      //! NOTE: as the shared memory does not overwrite unread memory we need to make sure its "empty"
+      while (attribute.sharedMemory.receive(shmResponse, false)) {}
+
       assert(shmResponse.header.type == sharedMem::NUMERICAL);
       LOG_TRACE(this << " Attribute " << attribute.name << " got new value " << shmResponse.numerical.value);
       attribute.lastValue = shmResponse.numerical.value;

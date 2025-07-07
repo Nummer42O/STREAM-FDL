@@ -80,6 +80,7 @@ public:
     const std::atomic<bool> &running,
     cr::milliseconds loopTargetInterval
   );
+  void removeDangling();
 
   static constexpr bool checkTopicNameIgnored(
     const std::string &memberName
